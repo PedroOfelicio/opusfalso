@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/* Identidade visual: tudo que é cor/fonte/raio fica aqui */
+@theme {
+  --color-fundo: #0b0b0f;
+  --color-card: #15151c;
+  --color-card-2: #1b1b24;
+  --color-borda: #26262f;
+  --color-borda-forte: #34343f;
+  --color-texto: #ededf2;
+  --color-suave: #9a9aab;
+  --color-apagado: #6b6b7b;
+  --color-roxo: #7c3aed;
+  --color-azul: #3b82f6;
+  --color-verde: #22c55e;
+  --color-amarelo: #eab308;
+  --color-vermelho: #ef4444;
+  --font-sans: "Plus Jakarta Sans Variable", "Inter", system-ui, sans-serif;
+  --radius-card: 16px;
+  --shadow-suave: 0 8px 30px rgb(0 0 0 / 0.35);
+  --animate-surgir: surgir 0.35s ease-out both;
+  --animate-brilho: brilho 1.6s ease-in-out infinite;
+
+  @keyframes surgir {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes brilho {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    background: var(--color-fundo);
+    color: var(--color-texto);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: rgb(124 58 237 / 0.45); }
+  input, textarea, select { color-scheme: dark; }
+  * { scrollbar-width: thin; scrollbar-color: #34343f transparent; }
+}
+
+@layer components {
+  .gradiente { background-image: linear-gradient(135deg, var(--color-roxo), var(--color-azul)); }
+  .texto-gradiente {
+    background-image: linear-gradient(135deg, #a78bfa, #60a5fa);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .cartao { background: var(--color-card); border: 1px solid var(--color-borda); border-radius: var(--radius-card); }
+  .campo {
+    width: 100%; background: var(--color-fundo); border: 1px solid var(--color-borda); border-radius: 12px;
+    padding: 0.6rem 0.8rem; font-size: 0.875rem; outline: none; transition: border-color .15s, box-shadow .15s;
+  }
+  .campo:focus { border-color: var(--color-roxo); box-shadow: 0 0 0 3px rgb(124 58 237 / 0.2); }
+  .esqueleto {
+    background: linear-gradient(90deg, #1b1b24 0%, #262630 50%, #1b1b24 100%);
+    background-size: 200% 100%; animation: var(--animate-brilho); border-radius: 12px;
+  }
+  .rotulo { font-size: 0.75rem; font-weight: 600; color: var(--color-suave); text-transform: uppercase; letter-spacing: .06em; }
+}

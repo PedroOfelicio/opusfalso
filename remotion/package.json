@@ -1,0 +1,20 @@
+{
+  "name": "opusfalso-legendas",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Legenda animada (Remotion) usada pelo pipeline Python",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts Clip"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.530",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "^4.0.530"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,13 @@
+# Python 3.12 recomendado (MediaPipe ainda não é garantido no 3.13)
+faster-whisper==1.2.1
+anthropic==1.9.0
+pydantic==2.13.5
+opencv-python==5.0.0.93
+mediapipe==1.0.1
+numpy==2.5.3
+fastapi==0.142.1
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+# DLLs do CUDA para o Whisper na GPU (NVIDIA). Sem GPU, pode remover.
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cudnn-cu12==9.27.0.42
