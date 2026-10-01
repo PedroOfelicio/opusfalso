@@ -1,6 +1,6 @@
 // Página de um projeto: mostra "Processando" enquanto roda e "Resultados" quando pronto.
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { EstadoErro, Esqueleto, usePolling } from "../components/ui";
 import Processando from "./Processando";
@@ -46,6 +46,7 @@ export default function Projeto() {
       </div>
     );
 
+  if (projeto.tipo === "longo") return <Navigate to={`/longos/${id}`} replace />;
   const temClipes = projeto.clips.some((c) => c.video_url);
   if (projeto.status === "pronto" || (temClipes && !["fila", "processando"].includes(projeto.status)))
     return <Resultados projeto={projeto} recarregar={carregar} setProjeto={setProjeto} />;

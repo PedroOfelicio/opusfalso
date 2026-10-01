@@ -33,7 +33,7 @@ def main():
     ap.add_argument("--layout", default="auto", choices=["auto", "rosto", "centro", "inteiro", "split", "dupla"])
     ap.add_argument("--musica", help="arquivo de música de fundo")
     ap.add_argument("--apoio", help="vídeo de apoio para a parte de baixo (gameplay)")
-    ap.add_argument("--refinar", action="store_true", help="gameplay: confirmar momentos enviando frames ao Claude")
+    ap.add_argument("--sem-imagens", action="store_true", help="gameplay: não enviar quadros ao Claude (só áudio e fala)")
     args = ap.parse_args()
 
     video = Path(args.video).expanduser().resolve()
@@ -45,7 +45,7 @@ def main():
         "num_clips": args.clips, "duracao": DURACOES[args.duracao], "formato": args.formato,
         "preset": args.preset, "estilo_legenda": "animada" if args.animada else "simples",
         "layout": args.layout, "musica_caminho": args.musica, "video_apoio": args.apoio,
-        "refinar_frames": args.refinar,
+        "ver_imagens": not args.sem_imagens,
     }
     meta = projetos.criar(video, video.name, args.modo, args.instrucao, opcoes)
     custo_antes = custos.resumo()["total"]

@@ -9,7 +9,7 @@ sem internet). É bem mais simples que o Claude:
 import re
 import unicodedata
 
-from modelos import CORES_NOMEADAS, AjusteClips, Corte, Emoji, PlanoEdicao
+from modelos import CORES_NOMEADAS, AjusteClips, Corte, Emoji, PlanoEdicao, clima_valido
 
 NUMEROS_ESCRITOS = {"um": 1, "uma": 1, "dois": 2, "duas": 2, "três": 3, "tres": 3, "quatro": 4, "cinco": 5,
                     "seis": 6, "sete": 7, "oito": 8, "nove": 9, "dez": 10}
@@ -45,12 +45,17 @@ def _regras():
         a, b = sorted((float(m.group(1)), float(m.group(2))))
         d["duracao_min"], d["duracao_max"] = a, b
 
+    def ate(m, d):
+        d["duracao_max"] = float(m.group(1))
+        d["duracao_min"] = min(d["duracao_min"], max(5.0, d["duracao_max"] / 2))
+
     def cor(m, d):
         d["legenda"]["cor"] = CORES_NOMEADAS[m.group(1)]
 
     return [
-        (r"\b(\d+|um|uma|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez)\s+(?:melhores|clipes?|cortes?|momentos?|clips?|v[ií]deos?|partes?)", num_clips),
+        (r"\b(\d+|um|uma|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez)\s+(?:melhores|clipes?|cortes?|momentos?|clips?|v[ií]deos?|partes?|jogadas?|lances?|kills?)", num_clips),
         (r"(\d+)\s*(?:s|seg\w*)?\s*(?:a|-|até|ate|e)\s*(\d+)\s*(?:s\b|seg)", faixa),
+        (r"(?:at[eé]|no m[aá]ximo|m[aá]x\.?)\s*(\d+)\s*(?:s\b|seg)", ate),
         (r"\bcurt[oa]s?\b", lambda m, d: d.update(duracao_min=15, duracao_max=30)),
         (r"\blong[oa]s?\b", lambda m, d: d.update(duracao_min=60, duracao_max=90)),
         (r"vertical|9:16|tiktok|reels?|shorts?", lambda m, d: d.update(formato="9:16")),
@@ -61,15 +66,26 @@ def _regras():
         (r"animad|din[aâ]mic", lambda m, d: d["legenda"].update(estilo="animada", ativa=True)),
         (r"legenda simples", lambda m, d: d["legenda"].update(estilo="simples", ativa=True)),
         (r"\b(opus|hormozi|minimalista)\b", lambda m, d: d["legenda"].update(preset=m.group(1))),
-        (r"legenda", lambda m, d: d["legenda"].update(ativa=True)),
+        # As regras positivas ignoram o "sem X", senão "sem música" ligaria a música
+        (r"(?<!sem )legenda", lambda m, d: d["legenda"].update(ativa=True)),
         (r"sem zoom", lambda m, d: d.update(zoom_em_enfase=False)),
-        (r"zoom", lambda m, d: d.update(zoom_em_enfase=True)),
+        (r"(?<!sem )zoom", lambda m, d: d.update(zoom_em_enfase=True)),
         (r"sil[eê]ncio|pausa|\bhum\b|v[ií]cio", lambda m, d: d.update(remover_silencios=True)),
         (r"sem m[uú]sica", lambda m, d: d.update(musica_fundo=False)),
-        (r"m[uú]sica", lambda m, d: d.update(musica_fundo=True)),
+        (r"(?<!sem )m[uú]sica", lambda m, d: d.update(musica_fundo=True)),
+        (r"(?<!sem )m[uú]sica\s+(\w+)", lambda m, d: d.update(musica_clima=clima_valido(m.group(1)) or d["musica_clima"])),
+        (r"sem (?:efeitos?|sons|sfx)", lambda m, d: d.update(efeitos_sonoros=False)),
+        (r"(?<!sem )(?:efeitos? sonoros?|\bsfx\b|whoosh|\bsons\b)", lambda m, d: d.update(efeitos_sonoros=True)),
+        (r"sem barra", lambda m, d: d.update(barra_progresso=False)),
+        (r"(?<!sem )barra|progresso", lambda m, d: d.update(barra_progresso=True)),
+        (r"sem (?:teaser|abertura|cl[ií]max no in[ií]cio)", lambda m, d: d.update(abertura_climax=False)),
+        (r"(?<!sem )(?:teaser|abr(?:ir|e) com o cl[ií]max|cl[ií]max no in[ií]cio)", lambda m, d: d.update(abertura_climax=True)),
+        (r"sem (?:limpar|melhorar) (?:a )?(?:voz|[aá]udio)", lambda m, d: d.update(limpar_voz=False)),
+        (r"(?<!sem )(?:ru[ií]do|chiado|zumbido|(?:limpar|melhorar) (?:a )?(?:voz|[aá]udio))", lambda m, d: d.update(limpar_voz=True)),
+        (r"emoji", lambda m, d: None),  # a legenda animada já põe emoji nas palavras-chave
         (r"normaliz|volume|[aá]udio", lambda m, d: d.update(normalizar_audio=True)),
         (r"sem t[ií]tulo", lambda m, d: d.update(titulo_gancho=False)),
-        (r"t[ií]tulo|gancho", lambda m, d: d.update(titulo_gancho=True)),
+        (r"(?<!sem )(?:t[ií]tulo|gancho)", lambda m, d: d.update(titulo_gancho=True)),
         (r"melhores|momentos|virais?|destaques?", lambda m, d: None),  # genérico, já é o comportamento padrão
     ]
 
@@ -80,8 +96,8 @@ def interpretar_instrucao(instrucao: str, base: PlanoEdicao) -> PlanoEdicao:
     texto = instrucao.lower().strip()
     if not texto:
         return base
-    # Divide em cláusulas por vírgula, ponto e vírgula e " e "
-    clausulas = [c.strip() for c in re.split(r"[,;\n]|\s+e\s+", texto) if c.strip()]
+    # Divide em cláusulas por vírgula, ponto e vírgula e " e " (menos em "entre 30 e 60")
+    clausulas = [c.strip() for c in re.split(r"[,;\n]|(?<!\d)\s+e\s+(?!\d)", texto) if c.strip()]
     regras = _regras()
     for clausula in clausulas:
         casou = False
@@ -227,6 +243,10 @@ def interpretar_ajuste(pedido: str, clipes: list[dict]) -> AjusteClips:
         d["legenda_ativa"] = False
     if "sem título" in texto or "sem titulo" in texto:
         d["titulo_ativo"] = False
+    if re.search(r"sem (?:efeitos?|sons|sfx)", texto):
+        d["efeitos_sonoros"] = False
+    elif re.search(r"efeitos? sonoros?|\bsfx\b|whoosh", texto):
+        d["efeitos_sonoros"] = True
     if "sem zoom" in texto:
         d["zoom_em_enfase"] = False
     elif "zoom" in texto:

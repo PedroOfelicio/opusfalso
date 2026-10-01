@@ -4,11 +4,11 @@ import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft, AudioLines, Crop, Download, Loader2, Minus, Pause, Play, Plus, RotateCcw, Save, Subtitles, Type, Upload,
 } from "lucide-react";
-import { api, formatarTempoPreciso } from "../api";
+import { api, CLIMAS, formatarTempoPreciso } from "../api";
 import ScoreBadge from "../components/ScoreBadge";
 import { Alternador, Aviso, Botao, EstadoErro, Esqueleto, Segmentado, usePolling, useAvisar } from "../components/ui";
 
-const CHAVES = ["formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom", "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica"];
+const CHAVES = ["formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom", "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura", "limpar_voz"];
 const CORES_RAPIDAS = ["#FFE600", "#22FF6B", "#3B82F6", "#FF4FD8", "#FF8A00", "#FFFFFF"];
 const LAYOUTS = [
   { id: "auto", rotulo: "Automático", texto: "Escolhe conforme o vídeo e os rostos encontrados" },
@@ -16,6 +16,7 @@ const LAYOUTS = [
   { id: "dupla", rotulo: "Duas pessoas", texto: "Tela dividida: uma pessoa em cima, outra embaixo" },
   { id: "centro", rotulo: "Recorte fixo", texto: "Recorte parado, com ajuste horizontal manual" },
   { id: "inteiro", rotulo: "Vídeo inteiro", texto: "Vídeo completo no meio com fundo desfocado" },
+  { id: "jogo", rotulo: "Gameplay em destaque", texto: "Recorte 4:5 grande no centro da mira" },
   { id: "split", rotulo: "Gameplay + facecam", texto: "Jogo em cima, facecam ou vídeo de apoio embaixo" },
 ];
 const ABAS = [
@@ -53,6 +54,7 @@ export default function Editor() {
   const [tempoAtual, setTempoAtual] = useState(0);
   const [editandoPalavra, setEditandoPalavra] = useState(null);
   const [estilos, setEstilos] = useState({});
+  const [audio, setAudio] = useState(null);
   const [salvando, setSalvando] = useState(false);
 
   const clip = projeto?.clips.find((c) => c.id === cid);
@@ -73,6 +75,7 @@ export default function Editor() {
   useEffect(carregar, [carregar]);
   useEffect(() => {
     api.estilos().then(setEstilos).catch(() => {});
+    api.audio().then(setAudio).catch(() => {});
   }, []);
   usePolling(carregar, 1000, !!renderizando);
 
@@ -387,7 +390,8 @@ export default function Editor() {
                   <ScoreBadge nota={clip.nota} tamanho={52} />
                   <div className="text-sm text-suave">{clip.justificativa}</div>
                 </div>
-                <Alternador ativo={!!cfg.titulo_ativo} aoMudar={(v) => mudarConfig("titulo_ativo", v)} rotulo="Mostrar título gancho" descricao="Aparece nos primeiros 2,8 segundos com fundo destacado" />
+                <Alternador ativo={!!cfg.titulo_ativo} aoMudar={(v) => mudarConfig("titulo_ativo", v)} rotulo="Mostrar título gancho" descricao="Aparece nos primeiros 4 segundos com fundo destacado" />
+                <Alternador ativo={cfg.abertura !== false} aoMudar={(v) => mudarConfig("abertura", v)} rotulo="Abrir com o clímax" descricao="1-2 s do melhor momento antes do contexto" />
                 <div>
                   <div className="rotulo mb-2">Título</div>
                   <textarea rows={3} value={rascunho.titulo} onChange={(e) => setRascunho((r) => ({ ...r, titulo: e.target.value }))} className="campo resize-none" />
@@ -398,11 +402,29 @@ export default function Editor() {
             {aba === "audio" && (
               <>
                 <Alternador ativo={!!cfg.normalizar} aoMudar={(v) => mudarConfig("normalizar", v)} rotulo="Normalizar volume" descricao="Padrão das redes (-14 LUFS)" />
+                <Alternador ativo={!!cfg.limpar_voz} aoMudar={(v) => mudarConfig("limpar_voz", v)} rotulo="Melhorar a voz" descricao="Tira ruído de fundo e zumbido, dá presença e comprime de leve" />
                 <Alternador ativo={!!cfg.remover_silencios} aoMudar={(v) => mudarConfig("remover_silencios", v)} rotulo="Remover silêncios e vícios" descricao="Corta pausas longas e “hum”, “é”, “tipo” isolados" />
+                <Alternador ativo={!!cfg.efeitos} aoMudar={(v) => mudarConfig("efeitos", v)} rotulo="Efeitos sonoros" descricao="Whoosh no título, impacto nas kills, pop nos zooms de ênfase" />
                 <div>
                   <div className="rotulo mb-2">Música de fundo</div>
-                  <input value={cfg.musica || ""} onChange={(e) => mudarConfig("musica", e.target.value || null)} placeholder="C:\musicas\lofi.mp3 (vazio = sem música)" className="campo font-mono text-[13px]" />
-                  <p className="text-xs text-apagado mt-2">A música abaixa sozinha quando há voz.</p>
+                  <select value={cfg.musica || ""} onChange={(e) => mudarConfig("musica", e.target.value || null)} className="campo cursor-pointer">
+                    <option value="">Sem música</option>
+                    {Object.entries(CLIMAS).map(([k, r]) =>
+                      audio?.musicas?.[k]?.length ? (
+                        <optgroup key={k} label={r}>
+                          {audio.musicas[k].map((m) => <option key={m} value={m}>{m.split(/[\\/]/).pop()}</option>)}
+                        </optgroup>
+                      ) : null,
+                    )}
+                    {cfg.musica && !Object.values(audio?.musicas || {}).flat().includes(cfg.musica) && (
+                      <option value={cfg.musica}>{cfg.musica.split(/[\\/]/).pop()}</option>
+                    )}
+                  </select>
+                  <input value={cfg.musica || ""} onChange={(e) => mudarConfig("musica", e.target.value || null)} placeholder="ou cole o caminho: C:\musicas\lofi.mp3" className="campo font-mono text-[13px] mt-2" />
+                  <p className="text-xs text-apagado mt-2">
+                    A música abaixa sozinha quando há voz.{" "}
+                    <button onClick={() => api.abrirPastaAudio()} className="text-roxo hover:underline cursor-pointer">Abrir a biblioteca de áudio</button>
+                  </p>
                 </div>
               </>
             )}

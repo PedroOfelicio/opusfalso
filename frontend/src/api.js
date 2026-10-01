@@ -29,16 +29,25 @@ export const api = {
   zerarCustos: () => req("/api/custos", { method: "DELETE" }),
 
   estilos: () => req("/api/estilos"),
+  templates: () => req("/api/templates"),
+  salvarTemplate: (nome, template) => req(`/api/templates/${nome}`, json("PUT", template)),
+  excluirTemplate: (nome) => req(`/api/templates/${nome}`, { method: "DELETE" }),
   salvarEstilo: (nome, estilo) => req(`/api/estilos/${nome}`, json("PUT", estilo)),
   excluirEstilo: (nome) => req(`/api/estilos/${nome}`, { method: "DELETE" }),
   fontes: () => req("/api/fontes"),
+  audio: () => req("/api/audio"),
+  abrirPastaAudio: () => req("/api/audio/abrir-pasta", { method: "POST" }),
+  baixarPacoteMusicas: () => req("/api/audio/pacote", { method: "POST" }),
+  excluirAudio: (caminho) => req(`/api/audio/arquivo?caminho=${encodeURIComponent(caminho)}`, { method: "DELETE" }),
+  urlAudio: (caminho) => `/api/audio/arquivo?caminho=${encodeURIComponent(caminho)}`,
 
   projetos: () => req("/api/projetos"),
   projeto: (id) => req(`/api/projetos/${id}`),
   excluirProjeto: (id, apagarSaida = false) => req(`/api/projetos/${id}?apagar_saida=${apagarSaida}`, { method: "DELETE" }),
   cancelar: (id) => req(`/api/projetos/${id}/cancelar`, { method: "POST" }),
-  reprocessar: (id) => req(`/api/projetos/${id}/reprocessar`, { method: "POST" }),
+  reprocessar: (id, doZero = false) => req(`/api/projetos/${id}/reprocessar${doZero ? "?do_zero=true" : ""}`, { method: "POST" }),
   abrirPasta: (id) => req(`/api/projetos/${id}/abrir-pasta`, { method: "POST" }),
+  refazerArquivos: (id) => req(`/api/projetos/${id}/refazer-arquivos`, { method: "POST" }),
   palavras: (id, inicio, fim, cid) => req(`/api/projetos/${id}/palavras?inicio=${inicio}&fim=${fim}&cid=${cid}`),
 
   editarClip: (id, cid, dados) => req(`/api/projetos/${id}/clips/${cid}`, json("PATCH", dados)),
@@ -47,10 +56,23 @@ export const api = {
   excluirClip: (id, cid) => req(`/api/projetos/${id}/clips/${cid}`, { method: "DELETE" }),
   ajustar: (id, pedido, clips) => req(`/api/projetos/${id}/ajustar`, json("POST", { pedido, clips })),
   urlZip: (id, clips = []) => `/api/projetos/${id}/zip?clips=${clips.join(",")}`,
+
+  armazenamento: () => req("/api/armazenamento"),
+  limparTemporarios: () => req("/api/armazenamento/limpar", { method: "POST" }),
+  juntarRepetidos: () => req("/api/armazenamento/juntar", { method: "POST" }),
+
+  revisarLongo: (id, dados) => req(`/api/projetos/${id}/edicao`, json("PUT", dados)),
+  urlPrevia: (id, inicio, fim) => `/api/projetos/${id}/previa?inicio=${inicio.toFixed(2)}&fim=${fim.toFixed(2)}`,
+  urlQuadro: (id, t) => `/api/projetos/${id}/quadro?t=${t.toFixed(1)}`,
 };
 
+export const criarLongo = (dados, aoProgresso) => criarProjeto(dados, aoProgresso, "/api/longos");
+
+// Climas da biblioteca de música (pastas DADOS/audio/musica/<clima>)
+export const CLIMAS = { energetica: "Energética", tensa: "Tensa", calma: "Calma", engracada: "Engraçada", epica: "Épica" };
+
 // Criação com upload: usa XMLHttpRequest para ter o progresso do envio
-export function criarProjeto({ arquivo, caminho, instrucao, modo, opcoes }, aoProgresso) {
+export function criarProjeto({ arquivo, caminho, instrucao, modo, opcoes }, aoProgresso, rota = "/api/projetos") {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     form.append("instrucao", instrucao);
@@ -59,7 +81,7 @@ export function criarProjeto({ arquivo, caminho, instrucao, modo, opcoes }, aoPr
     if (arquivo) form.append("arquivo", arquivo);
     else form.append("caminho", caminho);
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/projetos");
+    xhr.open("POST", rota);
     xhr.upload.onprogress = (e) => e.lengthComputable && aoProgresso?.(e.loaded / e.total);
     xhr.onload = () => {
       let dados = null;

@@ -15,10 +15,10 @@ const duracao = (e) => {
   return s < 60 ? `${Math.round(s)}s` : `${Math.floor(s / 60)}min ${Math.round(s % 60)}s`;
 };
 
-export default function StepProgress({ etapas = {}, atual, parado }) {
+export default function StepProgress({ etapas = {}, atual, parado, lista = ETAPAS }) {
   return (
     <ol className="space-y-1">
-      {ETAPAS.map(({ id, rotulo, icone: Icone, texto }, idx) => {
+      {lista.map(({ id, rotulo, icone: Icone, texto }, idx) => {
         const e = etapas[id];
         const status = e?.status === "ok" ? "ok" : id === atual && !parado ? "ativo" : "pendente";
         return (

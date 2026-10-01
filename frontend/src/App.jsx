@@ -7,6 +7,8 @@ import Projeto from "./pages/Projeto";
 import Editor from "./pages/Editor";
 import Estilos from "./pages/Estilos";
 import Configuracoes from "./pages/Configuracoes";
+import Longos from "./pages/Longos";
+import ProjetoLongo from "./pages/ProjetoLongo";
 import { Compass } from "lucide-react";
 
 export default function App() {
@@ -17,6 +19,8 @@ export default function App() {
         <main className="flex-1 min-w-0 overflow-y-auto">
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/longos" element={<Longos />} />
+            <Route path="/longos/:id" element={<ProjetoLongo />} />
             <Route path="/projetos" element={<Projetos />} />
             <Route path="/projetos/:id" element={<Projeto />} />
             <Route path="/projetos/:id/clips/:cid" element={<Editor />} />

@@ -59,9 +59,32 @@ def listar() -> list[dict]:
 
 def excluir(pid: str, apagar_saida: bool = False) -> None:
     meta = ler(pid)
-    if apagar_saida and meta and meta.get("saida_dir"):
+    if apagar_saida and meta and meta.get("saida_dir") and _saida_do_projeto(Path(meta["saida_dir"]), pid):
         shutil.rmtree(meta["saida_dir"], ignore_errors=True)
     shutil.rmtree(pasta(pid), ignore_errors=True)
+
+
+def _saida_do_projeto(saida: Path, pid: str) -> bool:
+    """Só apaga uma pasta de saída se ela estiver DENTRO da pasta de saída configurada (nunca a própria
+    pasta de saída nem outra qualquer) e tiver a marca de dono deste projeto."""
+    try:
+        base = config.pasta_saida().resolve()
+        saida = saida.resolve()
+        marcador = saida / ".projeto"
+        return (saida != base and base in saida.parents and marcador.is_file()
+                and marcador.read_text().strip() == pid)
+    except OSError:
+        return False
+
+
+def garantir_saida(meta: dict) -> Path:
+    """Recria a pasta de saída do projeto (com a marca de dono) se ela tiver sido apagada."""
+    saida = Path(meta["saida_dir"])
+    saida.mkdir(parents=True, exist_ok=True)
+    marcador = saida / ".projeto"
+    if not marcador.exists():
+        marcador.write_text(meta["id"])
+    return saida
 
 
 def _nome_seguro(nome: str) -> str:
@@ -86,8 +109,9 @@ def pasta_saida_para(nome_video: str, pid: str) -> Path:
 
 
 def criar(video: str | Path, nome_original: str, modo: str, instrucao: str, opcoes: dict,
-          ja_copiado: bool = False) -> dict:
-    """Cria o projeto. `video` é o caminho do arquivo (upload já salvo ou caminho local)."""
+          ja_copiado: bool = False, tipo: str = "curto") -> dict:
+    """Cria o projeto. `video` é o caminho do arquivo (upload já salvo ou caminho local).
+    tipo: "curto" (clipes para TikTok/Reels/Shorts) ou "longo" (vídeo longo para o YouTube)."""
     pid = uuid.uuid4().hex[:12]
     p = pasta(pid)
     (p / "tmp").mkdir(parents=True, exist_ok=True)
@@ -95,6 +119,7 @@ def criar(video: str | Path, nome_original: str, modo: str, instrucao: str, opco
     nome = Path(nome_original).stem
     meta = {
         "id": pid,
+        "tipo": tipo,
         "nome": nome,
         "video": str(video),
         "video_copiado": ja_copiado,

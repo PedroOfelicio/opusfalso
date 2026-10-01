@@ -14,9 +14,12 @@ import re
 from pathlib import Path
 
 import config
-from editor_ffmpeg import mapear_tempo
+from editor_ffmpeg import mapear_intervalo
 
 PONTUACAO_REMOVIDA = ".,;:…\"“”"
+
+
+DURACAO_TITULO = 4.0  # segundos na tela (cobre a abertura com o clímax)
 
 
 def carregar_estilos() -> dict:
@@ -37,20 +40,22 @@ def palavras_do_clipe(palavras: list[dict], trechos: list[tuple[float, float]],
     Marca as de ênfase e anexa emojis sugeridos."""
     enfase_norm = {_norm(p) for p in (enfase or [])}
     emoji_por = {_norm(e["palavra"]): e["emoji"] for e in (emojis or [])}
-    inicio, fim = trechos[0][0], trechos[-1][1]
+    inicio, fim = min(a for a, _ in trechos), max(b for _, b in trechos)
     resultado = []
     for w in palavras:
         if w["f"] < inicio or w["i"] > fim:
             continue
-        i = mapear_tempo(w["i"], trechos)
-        f = mapear_tempo(w["f"], trechos)
-        if i is None and f is None:
-            continue  # palavra removida (vício/silêncio)
-        i = i if i is not None else max(0.0, f - 0.2)
-        f = f if f is not None else i + 0.2
         n = _norm(w["p"])
-        resultado.append({"p": w["p"], "i": round(i, 3), "f": round(max(f, i + 0.05), 3),
-                          "enfase": n in enfase_norm, "emoji": emoji_por.pop(n, None)})
+        # Uma palavra pode aparecer 2x (na abertura com o clímax e no lugar dela)
+        for i, f in mapear_intervalo(w["i"], w["f"], trechos):
+            resultado.append({"p": w["p"], "i": round(i, 3), "f": round(max(f, i + 0.05), 3),
+                              "enfase": n in enfase_norm, "emoji": emoji_por.get(n)})
+    resultado.sort(key=lambda w: w["i"])
+    vistos = set()
+    for w in resultado:  # emoji só na primeira vez que a palavra aparece
+        if w["emoji"] and _norm(w["p"]) in vistos:
+            w["emoji"] = None
+        vistos.add(_norm(w["p"]))
     return resultado
 
 
@@ -104,7 +109,7 @@ def gerar_ass(palavras: list[dict], est: dict, saida: str | Path, largura: int, 
     max_chars = int(largura * 0.88 / (tam * largura_char))
     y = int(altura * est.get("posicao_y", 0.68))
     tit = est.get("titulo", {})
-    tam_tit = int(tit.get("tamanho", 64) * escala)
+    tam_tit = int(tit.get("tamanho", 64) * 1.35 * escala)  # título grande: é o gancho em texto
 
     linhas = [
         "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {largura}", f"PlayResY: {altura}",
@@ -122,7 +127,7 @@ def gerar_ass(palavras: list[dict], est: dict, saida: str | Path, largura: int, 
 
     if titulo:
         linhas.append(
-            f"Dialogue: 1,{_tempo(0)},{_tempo(min(2.8, duracao))},Titulo,,0,0,0,,"
+            f"Dialogue: 1,{_tempo(0)},{_tempo(min(DURACAO_TITULO, duracao))},Titulo,,0,0,0,,"
             r"{\fad(150,250)\fscx92\fscy92\t(0,180,\fscx104\fscy104)\t(180,320,\fscx100\fscy100)}"
             + titulo.replace("{", "(").replace("}", ")")
         )
@@ -265,4 +270,29 @@ def renderizar_remotion(base, saida, palavras, est, titulo, duracao, largura, al
     os.replace(tmp_saida, saida)
     if progresso:
         progresso(1.0)
+    return saida
+
+
+# ================================================================ legenda .srt (vídeos longos, para subir no YouTube)
+
+def _tempo_srt(t: float) -> str:
+    ms = int(round(max(t, 0) * 1000))
+    h, ms = divmod(ms, 3_600_000)
+    m, ms = divmod(ms, 60_000)
+    s, ms = divmod(ms, 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def gerar_srt(palavras: list[dict], saida: str | Path, max_chars: int = 42) -> Path:
+    """Linhas de até ~42 caracteres (padrão de legenda), quebradas em pausas e pontuação.
+    `palavras` já no tempo do vídeo final."""
+    grupos = agrupar(palavras, max_palavras=12, max_chars=max_chars, pausa=0.6)
+    linhas = []
+    for k, g in enumerate(grupos, 1):
+        texto = " ".join(w["p"].strip() for w in g).strip()
+        if texto:
+            fim = max(g[-1]["f"], g[0]["i"] + 0.5)
+            linhas += [str(k), f"{_tempo_srt(g[0]['i'])} --> {_tempo_srt(fim)}", texto, ""]
+    saida = Path(saida)
+    saida.write_text("\n".join(linhas), encoding="utf-8")
     return saida

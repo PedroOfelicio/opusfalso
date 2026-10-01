@@ -1,0 +1,128 @@
+{
+  "podcast_viral": {
+    "nome": "Podcast viral",
+    "descricao": "Legenda grande, câmera no rosto, zoom na ênfase, sem pausas",
+    "modo": "falado",
+    "preset": "hormozi",
+    "cor": null,
+    "animada": true,
+    "formato": "9:16",
+    "layout": "rosto",
+    "duracao": [
+      30,
+      60
+    ],
+    "titulo": true,
+    "barra": true,
+    "zoom": true,
+    "remover_silencios": true,
+    "musica": "calma",
+    "efeitos": true,
+    "abertura": true
+  },
+  "gameplay_insano": {
+    "nome": "Gameplay insano",
+    "descricao": "Sequência de lances sem tempo morto, recorte grande na mira, impacto nas kills",
+    "modo": "gameplay",
+    "preset": "gamer",
+    "cor": null,
+    "animada": true,
+    "formato": "9:16",
+    "layout": "jogo",
+    "duracao": [
+      30,
+      60
+    ],
+    "titulo": true,
+    "barra": true,
+    "zoom": true,
+    "remover_silencios": true,
+    "musica": "energetica",
+    "efeitos": true,
+    "abertura": true
+  },
+  "storytime": {
+    "nome": "Storytime",
+    "descricao": "Clima de cinema: legenda dourada discreta e música tensa",
+    "modo": "falado",
+    "preset": "cinema",
+    "cor": null,
+    "animada": true,
+    "formato": "9:16",
+    "layout": "rosto",
+    "duracao": [
+      30,
+      60
+    ],
+    "titulo": true,
+    "barra": true,
+    "zoom": false,
+    "remover_silencios": true,
+    "musica": "tensa",
+    "efeitos": false,
+    "abertura": true
+  },
+  "meme": {
+    "nome": "Meme / reação",
+    "descricao": "Palavras no meio da tela, pop forte, música engraçada e efeitos",
+    "modo": null,
+    "preset": "neon",
+    "cor": null,
+    "animada": true,
+    "formato": "9:16",
+    "layout": "auto",
+    "duracao": [
+      30,
+      60
+    ],
+    "titulo": true,
+    "barra": false,
+    "zoom": true,
+    "remover_silencios": true,
+    "musica": "engracada",
+    "efeitos": true,
+    "abertura": true
+  },
+  "aula": {
+    "nome": "Aula / tutorial",
+    "descricao": "Limpo e legível, sem música nem efeitos, clipes mais longos",
+    "modo": "falado",
+    "preset": "minimalista",
+    "cor": null,
+    "animada": false,
+    "formato": "9:16",
+    "layout": "rosto",
+    "duracao": [
+      60,
+      90
+    ],
+    "titulo": true,
+    "barra": false,
+    "zoom": false,
+    "remover_silencios": true,
+    "musica": "",
+    "efeitos": false,
+    "abertura": false
+  },
+  "youtube": {
+    "nome": "YouTube horizontal",
+    "descricao": "16:9 para o canal: vídeo inteiro, legenda discreta",
+    "modo": null,
+    "preset": "minimalista",
+    "cor": null,
+    "animada": false,
+    "formato": "16:9",
+    "layout": "auto",
+    "duracao": [
+      60,
+      90
+    ],
+    "titulo": false,
+    "barra": false,
+    "zoom": false,
+    "remover_silencios": true,
+    "musica": "",
+    "efeitos": false,
+    "abertura": false
+  }
+}

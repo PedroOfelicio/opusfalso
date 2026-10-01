@@ -98,6 +98,30 @@ export default function Resultados({ projeto, recarregar, setProjeto }) {
         </div>
       </div>
 
+      {projeto.arquivos_sumidos > 0 && (
+        <div className="mb-4">
+          <Aviso tipo="alerta" titulo={`${projeto.arquivos_sumidos} clipe(s) sem o arquivo de vídeo`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>Os arquivos foram apagados ou movidos da pasta de saída. Dá para refazer a partir do vídeo original, sem custo na API.</span>
+              <Botao
+                tamanho="sm"
+                icone={RotateCcw}
+                onClick={async () => {
+                  try {
+                    await api.refazerArquivos(projeto.id);
+                    recarregar();
+                  } catch (e) {
+                    avisar(e.message, "erro");
+                  }
+                }}
+              >
+                Refazer os arquivos
+              </Botao>
+            </div>
+          </Aviso>
+        </div>
+      )}
+
       {/* Ajuste em linguagem natural */}
       <div className="cartao p-2 pl-4 flex items-center gap-3 mb-3 focus-within:border-roxo/60 transition-colors">
         <Sparkles className="size-5 text-roxo shrink-0" />
@@ -195,7 +219,7 @@ export default function Resultados({ projeto, recarregar, setProjeto }) {
       <Confirmar
         aberto={confirmar?.tipo === "reprocessar"}
         titulo="Refazer o projeto do zero?"
-        texto="Os clipes atuais serão substituídos. A transcrição vem do cache, então é rápido."
+        texto="Os clipes atuais serão substituídos e o Claude escolhe os trechos de novo (custa de novo na API). A transcrição vem do cache."
         rotuloOk="Refazer"
         aoConfirmar={() => {
           setConfirmar(null);

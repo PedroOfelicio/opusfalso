@@ -12,6 +12,7 @@ import os
 import shutil
 import sys
 import threading
+import time
 from pathlib import Path
 
 # Pasta do código (backend/) e raiz do repositório
@@ -27,13 +28,16 @@ PASTA_MODELOS = DADOS / "modelos"
 ARQ_CONFIG = DADOS / "config.json"
 ARQ_CUSTOS = DADOS / "custos.json"
 ARQ_ESTILOS = PASTA_BACKEND / "estilos.json"
+ARQ_TEMPLATES = PASTA_BACKEND / "templates.json"
 
 # Recursos versionados no repositório (copiados para DADOS na primeira execução)
 RECURSOS = PASTA_BACKEND / "recursos"
 
 PADRAO = {
     "api_key": "",                      # vazio = usa a variável ANTHROPIC_API_KEY
-    "modelo": "claude-sonnet-4-6",
+    "workspace_id": "",                 # só para chaves sem workspace (vazio = ANTHROPIC_WORKSPACE_ID)
+    "modelo": "claude-sonnet-5-5",
+    "modelo_rapido": "",                # revisão fina de cada clipe; vazio = o mesmo do "modelo"
     "pasta_saida": str(DADOS / "saida"),
     "usar_gpu": True,
     "modelo_whisper": "large-v3-turbo",
@@ -105,6 +109,11 @@ def api_key() -> str:
     return carregar().get("api_key") or os.environ.get("ANTHROPIC_API_KEY", "")
 
 
+def workspace_id() -> str:
+    """Workspace da Anthropic; exigido quando a chave não está vinculada a um."""
+    return (carregar().get("workspace_id") or os.environ.get("ANTHROPIC_WORKSPACE_ID", "")).strip()
+
+
 def pasta_saida() -> Path:
     return Path(carregar()["pasta_saida"])
 
@@ -122,4 +131,13 @@ def gravar_json(caminho: Path, dados) -> None:
     caminho.parent.mkdir(parents=True, exist_ok=True)
     tmp = caminho.with_suffix(caminho.suffix + ".tmp")
     tmp.write_text(json.dumps(dados, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, caminho)
+    # No Windows o rename falha (acesso negado) se alguém estiver lendo o arquivo
+    # naquele instante (a interface consulta o meta.json várias vezes por segundo)
+    for tentativa in range(20):
+        try:
+            os.replace(tmp, caminho)
+            return
+        except PermissionError:
+            if tentativa == 19:
+                raise
+            time.sleep(0.05)

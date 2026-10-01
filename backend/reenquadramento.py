@@ -13,6 +13,8 @@ Layouts:
 - "centro":  recorte fixo (com deslocamento manual -1..1)
 - "inteiro": vídeo inteiro no meio, fundo desfocado
 - "split":   gameplay em cima, facecam (ou vídeo de apoio) embaixo
+- "jogo":    gameplay em destaque: recorte 4:5 do centro (mira) ocupando ~70% da altura,
+             fundo desfocado em cima (título) e embaixo
 - "dupla":   duas pessoas, uma em cima e outra embaixo
 - "auto":    escolhe sozinho conforme o modo e os rostos encontrados
 """
@@ -55,7 +57,8 @@ class DetectorRostos:
                 log.info("Detector de rostos: %s", nome)
                 return True
             except Exception as e:
-                log.warning("Detector %s indisponível: %s", nome, e)
+                # o Haar é só a última reserva (e o OpenCV 5 nem traz o arquivo): não precisa de alerta
+                (log.debug if nome == "haar" else log.warning)("Detector %s indisponível: %s", nome, e)
         return False
 
     def trocar(self) -> bool:
@@ -93,7 +96,10 @@ class DetectorRostos:
         return detectar
 
     def _criar_haar(self):
-        cascata = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        caminho = Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"
+        cascata = cv2.CascadeClassifier(str(caminho))
+        if cascata.empty():  # o OpenCV 5 não traz mais os arquivos .xml do Haar
+            raise RuntimeError("arquivo haarcascade não encontrado")
 
         def detectar(bgr):
             cinza = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
@@ -102,7 +108,14 @@ class DetectorRostos:
         return detectar
 
     def __call__(self, bgr):
-        return self._det(bgr) if self._det else []
+        if not self._det:
+            return []
+        try:
+            return self._det(bgr)
+        except cv2.error as e:
+            # Um detector com problema não pode derrubar o render: conta como "sem rosto"
+            log.warning("Detector %s falhou (%s); seguindo sem rosto neste frame", self.nome, str(e)[:120])
+            return []
 
 
 # ============================================================== análise
@@ -327,17 +340,23 @@ def trajetoria_camera(analise: Analise, total_frames: int) -> tuple[np.ndarray, 
     return cx, cy
 
 
-def zoom_por_frame(total_frames: int, fps: float, momentos: list[tuple[float, float]], intensidade=0.12) -> np.ndarray:
-    """Fator de zoom (>=1) por frame: sobe em 0,2 s, segura e desce em 0,35 s (easing suave)."""
-    z = np.ones(total_frames)
+def zoom_por_frame(total_frames: int, fps: float, momentos: list[tuple[float, float]], intensidade=0.12,
+                   base: list[tuple[float, float, float]] | None = None) -> np.ndarray:
+    """Fator de zoom (>=1) por frame: sobe em 0,2 s, segura e desce em 0,35 s (easing suave).
+    `base` dá um zoom fixo por trecho (corte seco = mudança instantânea de enquadramento, o
+    "punch-in" que esconde o pulo do jump cut); os momentos de ênfase somam por cima."""
     t = np.arange(total_frames) / fps
+    fixo = np.ones(total_frames)
+    for a, b, fator in base or []:
+        fixo[(t >= a) & (t < b)] = fator
+    z = np.ones(total_frames)
     for a, b in momentos:
         subida = np.clip((t - (a - 0.1)) / 0.2, 0, 1)
         descida = np.clip(1 - (t - (b + 0.35)) / 0.35, 0, 1)
         env = np.minimum(subida, descida)
         env = env * env * (3 - 2 * env)  # smoothstep
         z = np.maximum(z, 1 + intensidade * env)
-    return z
+    return z * fixo
 
 
 # ============================================================== geometria
@@ -390,6 +409,7 @@ class OpcoesRender:
     modo: str = "falado"
     deslocamento_x: float = 0.0        # -1 (esquerda) .. 1 (direita), usado em "centro"
     zoom_momentos: list = field(default_factory=list)  # [(inicio, fim)] no tempo do clipe
+    zoom_base: list = field(default_factory=list)      # [(inicio, fim, fator)]: zoom fixo por trecho (pulsos)
     barra_progresso: dict | None = None  # {"cor": "#FFE600", "altura": 10}
     arquivo_ass: str | None = None     # legenda para queimar (caminho relativo a DADOS)
     video_apoio: str | None = None     # vídeo para a metade de baixo no layout split
@@ -406,7 +426,7 @@ def escolher_layout(opc: OpcoesRender, analise: Analise) -> str:
     if opc.formato != "9:16":
         return "rosto" if analise.trilhas else "centro"
     if opc.modo == "gameplay":
-        return "split" if (_facecam(analise) or opc.video_apoio) else "inteiro"
+        return "split" if (_facecam(analise) or opc.video_apoio) else "jogo"
     return "rosto" if analise.trilhas else "inteiro"
 
 
@@ -433,12 +453,12 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
     if layout == "centro" or (layout == "rosto" and not analise.trilhas):
         cx[:] = W / 2 + opc.deslocamento_x * (W / 2)
         cy[:] = H / 2
-    z = zoom_por_frame(total, fps, opc.zoom_momentos)
+    z = zoom_por_frame(total, fps, opc.zoom_momentos, base=opc.zoom_base)
 
     facecam = _facecam(analise) if layout == "split" else None
     apoio = cv2.VideoCapture(opc.video_apoio) if (layout == "split" and opc.video_apoio and not facecam) else None
     if layout == "split" and not facecam and apoio is None:
-        layout = "inteiro"  # sem facecam nem vídeo de apoio
+        layout = "jogo"  # sem facecam nem vídeo de apoio
 
     dupla = None
     if layout == "dupla":
@@ -514,6 +534,17 @@ def _compor(frame, layout, i, LW, LH, aspecto, cx, cy, z, facecam, apoio, dupla)
         y = max(0, min(LH - fh, y))
         x = (LW - fw) // 2
         fundo[y:y + fh, x:x + fw] = img
+        return fundo
+
+    if layout == "jogo":
+        # Recorte 4:5 centrado na mira: bem maior que o vídeo inteiro encolhido e ainda mostra
+        # contexto (inimigos dos lados). Numa fonte 1080p o recorte é ~864x1080 (quase sem upscale).
+        fundo = _fundo_desfocado(frame, LW, LH)
+        alto = int(min(LH, LW * 1.25))
+        x0, y0, cw, ch = _recorte(W, H, LW / alto, W / 2, H / 2, z[i])
+        img = cv2.resize(frame[y0:y0 + ch, x0:x0 + cw], (LW, alto), interpolation=cv2.INTER_LINEAR)
+        y = int((LH - alto) * 0.45)
+        fundo[y:y + alto] = img
         return fundo
 
     if layout == "split":

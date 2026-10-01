@@ -1,24 +1,4 @@
 {
-  "opus": {
-    "nome": "Opus",
-    "descricao": "Amarelo vibrante, pop na palavra falada, 3 palavras por vez",
-    "fonte": "Montserrat Black",
-    "arquivo_fonte": "Montserrat-Black.ttf",
-    "tamanho": 88,
-    "maiusculas": true,
-    "cor_texto": "#FFFFFF",
-    "cor_destaque": "#FFE600",
-    "cor_contorno": "#000000",
-    "contorno": 9,
-    "sombra": 5,
-    "posicao_y": 0.68,
-    "palavras_por_vez": 3,
-    "animacao": "pop",
-    "escala_pop": 1.15,
-    "duracao_pop_ms": 120,
-    "titulo": { "cor_fundo": "#FFE600", "cor_texto": "#000000", "tamanho": 64 },
-    "barra_progresso": { "ativa": true, "cor": "#FFE600", "altura": 10 }
-  },
   "hormozi": {
     "nome": "Hormozi",
     "descricao": "Fonte condensada gigante, 2 palavras por vez, destaque verde",
@@ -27,7 +7,7 @@
     "tamanho": 118,
     "maiusculas": true,
     "cor_texto": "#FFFFFF",
-    "cor_destaque": "#22FF6B",
+    "cor_destaque": "#FBFF00",
     "cor_contorno": "#000000",
     "contorno": 10,
     "sombra": 6,
@@ -36,8 +16,16 @@
     "animacao": "pop",
     "escala_pop": 1.25,
     "duracao_pop_ms": 140,
-    "titulo": { "cor_fundo": "#FFFFFF", "cor_texto": "#000000", "tamanho": 70 },
-    "barra_progresso": { "ativa": true, "cor": "#22FF6B", "altura": 12 }
+    "titulo": {
+      "cor_fundo": "#FFFFFF",
+      "cor_texto": "#000000",
+      "tamanho": 70
+    },
+    "barra_progresso": {
+      "ativa": true,
+      "cor": "#22FF6B",
+      "altura": 12
+    }
   },
   "minimalista": {
     "nome": "Minimalista",
@@ -56,7 +44,99 @@
     "animacao": "fade",
     "escala_pop": 1.0,
     "duracao_pop_ms": 160,
-    "titulo": { "cor_fundo": "#15151C", "cor_texto": "#FFFFFF", "tamanho": 56 },
-    "barra_progresso": { "ativa": false, "cor": "#FFFFFF", "altura": 6 }
+    "titulo": {
+      "cor_fundo": "#15151C",
+      "cor_texto": "#FFFFFF",
+      "tamanho": 56
+    },
+    "barra_progresso": {
+      "ativa": false,
+      "cor": "#FFFFFF",
+      "altura": 6
+    }
+  },
+  "gamer": {
+    "nome": "Gamer",
+    "descricao": "Fonte condensada gigante, destaque vermelho neon, 2 palavras por vez",
+    "fonte": "Anton",
+    "arquivo_fonte": "Anton-Regular.ttf",
+    "tamanho": 112,
+    "maiusculas": true,
+    "cor_texto": "#FFFFFF",
+    "cor_destaque": "#FF2E63",
+    "cor_contorno": "#000000",
+    "contorno": 10,
+    "sombra": 6,
+    "posicao_y": 0.62,
+    "palavras_por_vez": 2,
+    "animacao": "pop",
+    "escala_pop": 1.3,
+    "duracao_pop_ms": 130,
+    "titulo": {
+      "cor_fundo": "#FF2E63",
+      "cor_texto": "#FFFFFF",
+      "tamanho": 68
+    },
+    "barra_progresso": {
+      "ativa": true,
+      "cor": "#FF2E63",
+      "altura": 12
+    }
+  },
+  "cinema": {
+    "nome": "Cinema",
+    "descricao": "Elegante, dourado, sem maiúsculas, embaixo da tela, para histórias",
+    "fonte": "Poppins SemiBold",
+    "arquivo_fonte": "Poppins-SemiBold.ttf",
+    "tamanho": 70,
+    "maiusculas": false,
+    "cor_texto": "#F5F5F5",
+    "cor_destaque": "#FFD27A",
+    "cor_contorno": "#000000",
+    "contorno": 2,
+    "sombra": 10,
+    "posicao_y": 0.78,
+    "palavras_por_vez": 4,
+    "animacao": "fade",
+    "escala_pop": 1.0,
+    "duracao_pop_ms": 160,
+    "titulo": {
+      "cor_fundo": "#0B0B0F",
+      "cor_texto": "#FFD27A",
+      "tamanho": 58
+    },
+    "barra_progresso": {
+      "ativa": true,
+      "cor": "#FFD27A",
+      "altura": 5
+    }
+  },
+  "neon": {
+    "nome": "Neon",
+    "descricao": "Grosso no meio da tela, destaque ciano, pop forte, para memes e reações",
+    "fonte": "Montserrat Black",
+    "arquivo_fonte": "Montserrat-Black.ttf",
+    "tamanho": 96,
+    "maiusculas": true,
+    "cor_texto": "#FFFFFF",
+    "cor_destaque": "#22D3EE",
+    "cor_contorno": "#000000",
+    "contorno": 10,
+    "sombra": 4,
+    "posicao_y": 0.52,
+    "palavras_por_vez": 2,
+    "animacao": "pop",
+    "escala_pop": 1.35,
+    "duracao_pop_ms": 110,
+    "titulo": {
+      "cor_fundo": "#22D3EE",
+      "cor_texto": "#000000",
+      "tamanho": 66
+    },
+    "barra_progresso": {
+      "ativa": true,
+      "cor": "#22D3EE",
+      "altura": 10
+    }
   }
 }

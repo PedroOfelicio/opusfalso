@@ -147,3 +147,30 @@ def candidatos_gameplay(analise: dict, transcricao: dict | None, dmin: float, dm
         if len(candidatos) >= maximo:
             break
     return candidatos
+
+
+def trechos_mortos(analise: dict, palavras: list[dict], inicio: float, fim: float,
+                   minimo: float = 3.0, margem: float = 0.5) -> list[tuple[float, float]]:
+    """Tempo morto do gameplay dentro de [inicio, fim]: segundos com energia baixa (abaixo do
+    percentil 40 do vídeo) e sem ninguém falando, em sequências de `minimo` segundos ou mais.
+    Devolve os intervalos a remover, deixando `margem` de respiro dos dois lados."""
+    curva = np.array(analise.get("curva") or [])
+    if len(curva) < 10:
+        return []
+    limiar = np.percentile(curva, 40)
+    falando = np.zeros(len(curva), dtype=bool)
+    for w in palavras:
+        if w["f"] >= inicio and w["i"] <= fim:
+            falando[int(w["i"]):int(w["f"]) + 1] = True
+    mortos, comeco = [], None
+    for s in range(int(inicio), int(np.ceil(fim)) + 1):
+        morto = s < len(curva) and curva[s] < limiar and not falando[s]
+        if morto and comeco is None:
+            comeco = s
+        elif not morto and comeco is not None:
+            if s - comeco >= minimo:
+                mortos.append((max(inicio, comeco + margem), min(fim, s - margem)))
+            comeco = None
+    if comeco is not None and fim - comeco >= minimo:
+        mortos.append((max(inicio, comeco + margem), fim))  # fim morto: corta até o final
+    return [(round(a, 2), round(b, 2)) for a, b in mortos if b - a >= 1.0]

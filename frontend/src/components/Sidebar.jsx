@@ -1,11 +1,12 @@
 // Barra lateral fixa com navegação e status do sistema.
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Cpu, FolderOpen, Home, Palette, Settings, Sparkles } from "lucide-react";
+import { Cpu, Film, FolderOpen, Home, Palette, Settings, Sparkles } from "lucide-react";
 import { api } from "../api";
 
 const itens = [
   { para: "/", rotulo: "Início", icone: Home, fim: true },
+  { para: "/longos", rotulo: "Vídeos longos", icone: Film },
   { para: "/projetos", rotulo: "Projetos", icone: FolderOpen },
   { para: "/estilos", rotulo: "Estilos", icone: Palette },
   { para: "/configuracoes", rotulo: "Configurações", icone: Settings },
@@ -71,6 +72,12 @@ export default function Sidebar() {
                 </span>
               </div>
               {sistema?.fila > 0 && <div className="text-azul">{sistema.fila} job(s) na fila</div>}
+              {sistema?.disco_livre != null && sistema.disco_livre < 5 * 1024 ** 3 && (
+                <NavLink to="/configuracoes" className="flex items-center gap-2 text-vermelho hover:underline">
+                  <span className="size-2 rounded-full bg-vermelho shrink-0" />
+                  Disco quase cheio ({(sistema.disco_livre / 1024 ** 3).toFixed(1).replace(".", ",")} GB)
+                </NavLink>
+              )}
             </>
           )}
           <div className="pt-2 border-t border-borda flex justify-between">

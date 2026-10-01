@@ -93,7 +93,7 @@ export function EstadoVazio({ icone: Icone, titulo, texto, acao }) {
   );
 }
 
-export function EstadoErro({ mensagem, aoTentar }) {
+export function EstadoErro({ mensagem, aoTentar, dica, rotulo = "Tentar de novo" }) {
   return (
     <div className="cartao p-6 flex items-start gap-4 border-vermelho/30 animate-surgir">
       <div className="size-10 rounded-xl bg-vermelho/10 flex items-center justify-center shrink-0">
@@ -102,10 +102,11 @@ export function EstadoErro({ mensagem, aoTentar }) {
       <div className="flex-1 min-w-0">
         <h3 className="font-semibold">Algo deu errado</h3>
         <p className="text-sm text-suave mt-1 break-words whitespace-pre-wrap">{mensagem}</p>
+        {dica && <p className="text-xs text-apagado mt-2">{dica}</p>}
       </div>
       {aoTentar && (
         <Botao icone={RefreshCw} onClick={aoTentar}>
-          Tentar de novo
+          {rotulo}
         </Botao>
       )}
     </div>

@@ -61,7 +61,7 @@ export default function PreviewLegenda({ estilo, fundo, titulo = "Ninguém te co
               background: tituloCfg.cor_fundo,
               color: tituloCfg.cor_texto,
               fontFamily: `"${estilo.fonte}"`,
-              fontSize: (tituloCfg.tamanho || 64) * escala,
+              fontSize: (tituloCfg.tamanho || 64) * 1.35 * escala,
               padding: `${18 * escala}px ${30 * escala}px`,
               borderRadius: 18 * escala,
               lineHeight: 1.15,

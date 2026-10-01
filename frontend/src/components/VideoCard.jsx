@@ -1,7 +1,7 @@
 // Card de um clipe: preview ao passar o mouse, nota viral, título editável e ações.
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Download, Loader2, Pencil, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
+import { Check, Copy, Download, Loader2, Pencil, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import { formatarDuracao } from "../api";
 import ScoreBadge from "./ScoreBadge";
 import { Dica } from "./ui";
@@ -13,6 +13,17 @@ export default function VideoCard({ clip, projetoId, selecionado, aoSelecionar, 
   const [emFoco, setEmFoco] = useState(false);
   const [editando, setEditando] = useState(false);
   const [titulo, setTitulo] = useState(clip.titulo);
+  const [copiado, setCopiado] = useState(false);
+  const textoPost = [clip.legenda_post, (clip.hashtags || []).join(" ")].filter(Boolean).join("\n\n");
+  const copiarPost = async () => {
+    try {
+      await navigator.clipboard.writeText(textoPost);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1500);
+    } catch {
+      /* sem permissão de área de transferência: não faz nada */
+    }
+  };
   const ocupado = clip.status === "fila" || clip.status === "renderizando";
   const formato = clip.config_efetiva?.formato || "9:16";
 
@@ -74,6 +85,12 @@ export default function VideoCard({ clip, projetoId, selecionado, aoSelecionar, 
             </div>
           </div>
         )}
+        {clip.sem_arquivo && !ocupado && (
+          <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-center p-4 gap-1">
+            <div className="text-sm font-semibold">Arquivo não encontrado</div>
+            <div className="text-xs text-suave">Foi apagado ou movido da pasta de saída</div>
+          </div>
+        )}
         {clip.status === "erro" && !ocupado && (
           <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center gap-2 p-4 text-center">
             <TriangleAlert className="size-7 text-vermelho" />
@@ -104,6 +121,7 @@ export default function VideoCard({ clip, projetoId, selecionado, aoSelecionar, 
             <Pencil className="inline size-3 ml-1.5 text-apagado opacity-0 group-hover/titulo:opacity-100" />
           </button>
         )}
+        {clip.hashtags?.length > 0 && <div className="text-xs text-apagado truncate mt-1" title={textoPost}>{clip.hashtags.join(" ")}</div>}
         <div className="flex items-center gap-1 mt-3 -mx-1">
           <Dica texto="Baixar" lado="cima">
             <a
@@ -118,6 +136,13 @@ export default function VideoCard({ clip, projetoId, selecionado, aoSelecionar, 
               <Pencil className="size-4" />
             </Link>
           </Dica>
+          {textoPost && (
+            <Dica texto="Copiar legenda e hashtags do post" lado="cima">
+              <button onClick={copiarPost} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-white/5 cursor-pointer">
+                {copiado ? <Check className="size-4 text-verde" /> : <Copy className="size-4" />}
+              </button>
+            </Dica>
+          )}
           <Dica texto="Regenerar: trocar por outro momento do vídeo" lado="cima">
             <button onClick={aoRegenerar} disabled={ocupado} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-white/5 disabled:opacity-40 cursor-pointer">
               <RefreshCw className="size-4" />

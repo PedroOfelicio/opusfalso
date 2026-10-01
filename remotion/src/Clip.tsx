@@ -152,7 +152,7 @@ const Emoji: React.FC<{ emoji: string; desde: number; tamanho: number }> = ({ em
 const Titulo: React.FC<{ texto: string; estilo: Estilo; escala: number }> = ({ texto, estilo, escala }) => {
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
-  const fimTitulo = 2.8 * fps;
+  const fimTitulo = 4 * fps; // gancho em texto durante a abertura com o clímax
   if (frame > fimTitulo) return null;
   const entrada = spring({ frame, fps, config: { damping: 12, stiffness: 200 } });
   const saida = interpolate(frame, [fimTitulo - 8, fimTitulo], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
@@ -175,9 +175,9 @@ const Titulo: React.FC<{ texto: string; estilo: Estilo; escala: number }> = ({ t
           background: cfg.cor_fundo,
           color: cfg.cor_texto,
           fontFamily: `"${estilo.fonte}", sans-serif`,
-          fontSize: cfg.tamanho * escala,
-          lineHeight: 1.15,
-          padding: `${18 * escala}px ${30 * escala}px`,
+          fontSize: cfg.tamanho * 1.35 * escala,
+          lineHeight: 1.12,
+          padding: `${20 * escala}px ${34 * escala}px`,
           borderRadius: 18 * escala,
           textAlign: "center",
           boxShadow: "0 12px 40px rgba(0,0,0,0.45)",

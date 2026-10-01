@@ -12,7 +12,9 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -20,19 +22,26 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from starlette.background import BackgroundTask
 
+import armazenamento
+import biblioteca_audio as biblioteca
 import config
 import custos
+import editor_ffmpeg as ef
 import legendas
+import longo
 import pipeline
+import planejador_llm as llm
 import projetos
 import transcricao as tr
 from jobs import fila
+from modelos import Template
 
 log = logging.getLogger("api")
 config.preparar_pastas()
+biblioteca.preparar()
 
 app = FastAPI(title="Editor de vídeo local com IA")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -80,20 +89,37 @@ def _publico(meta: dict) -> dict:
     if m["status"] == "processando" and m.get("iniciado_em") and m.get("progresso", 0) > 0.02:
         decorrido = agora - m["iniciado_em"]
         m["restante_s"] = round(decorrido * (1 - m["progresso"]) / m["progresso"])
+    sumidos = 0
     for c in m.get("clips", []):
         v = c.get("versao", 0)
-        c["video_url"] = f"/api/projetos/{pid}/clips/{c['id']}/video?v={v}" if c.get("arquivo") else None
+        c["sem_arquivo"] = bool(c.get("arquivo")) and not Path(c["arquivo"]).exists()
+        sumidos += c["sem_arquivo"]
+        c["video_url"] = f"/api/projetos/{pid}/clips/{c['id']}/video?v={v}" if c.get("arquivo") and not c["sem_arquivo"] else None
         c["thumb_url"] = f"/api/projetos/{pid}/clips/{c['id']}/thumb?v={v}" if c.get("thumb") else None
         c["config_efetiva"] = pipeline.config_clip(meta, c) if meta.get("plano") else None
         for chave in ("arquivo", "thumb", "corte_assinatura"):
             c.pop(chave, None)
+    m["arquivos_sumidos"] = sumidos
+    lg = m.get("longo")
+    if lg:
+        lg["sem_arquivo"] = not Path(lg.get("arquivo") or "").is_file()
+        v = lg.get("versao", 0)
+        lg["video_url"] = f"/api/projetos/{pid}/longo/video?v={v}"
+        lg["srt_url"] = f"/api/projetos/{pid}/longo/srt?v={v}" if lg.get("srt") else None
+        lg["texto_url"] = f"/api/projetos/{pid}/longo/texto?v={v}"
+        lg["thumbs_url"] = [f"/api/projetos/{pid}/longo/thumb/{k}?v={v}" for k in range(len(lg.get("thumbs", [])))]
+        for chave in ("arquivo", "srt", "texto", "thumbs"):
+            lg.pop(chave, None)
+    m["tipo"] = m.get("tipo", "curto")
     m["fila_pendentes"] = fila.pendentes()
     return m
 
 
 def _resumo(meta: dict) -> dict:
     return {
-        "id": meta["id"], "nome": meta["nome"], "modo": meta["modo"], "status": meta["status"],
+        "id": meta["id"], "tipo": meta.get("tipo", "curto"), "nome": meta["nome"], "modo": meta["modo"],
+        "status": meta["status"], "modo_longo": (meta.get("opcoes") or {}).get("modo_longo"),
+        "duracao_final": (meta.get("longo") or {}).get("duracao"),
         "criado_em": meta["criado_em"], "progresso": meta.get("progresso", 0), "etapa": meta.get("etapa"),
         "num_clips": len([c for c in meta.get("clips", []) if c.get("arquivo")]),
         "melhor_nota": max([c.get("nota", 0) for c in meta.get("clips", [])] or [0]),
@@ -116,7 +142,8 @@ def sistema():
     return {
         "gpu": gpu, "cuda": tr.gpu_disponivel(), "remotion": legendas.remotion_disponivel(),
         "tem_chave": bool(config.api_key()), "dados": str(config.DADOS), "fila": fila.pendentes(),
-        "claude_erro": pipeline.llm.estado["ultimo_erro"],
+        "disco_livre": armazenamento.livre(),
+        "claude_erro": llm.estado["ultimo_erro"],
         "job_atual": ({k: fila.atual[k] for k in ("pid", "tipo", "cid")} if fila.atual else None),
     }
 
@@ -135,7 +162,9 @@ def ler_config():
 
 class ConfigEntrada(BaseModel):
     api_key: str | None = None
+    workspace_id: str | None = None
     modelo: str | None = None
+    modelo_rapido: str | None = None
     pasta_saida: str | None = None
     usar_gpu: bool | None = None
     modelo_whisper: str | None = None
@@ -147,6 +176,8 @@ def salvar_config(dados: ConfigEntrada):
     novos = {k: v for k, v in dados.model_dump().items() if v is not None}
     if "api_key" in novos and "••" in novos["api_key"]:
         novos.pop("api_key")  # veio a versão mascarada: não altera
+    elif "api_key" in novos and not novos["api_key"].startswith("sk-ant-"):
+        raise HTTPException(400, "Chave inválida: a chave da API da Anthropic começa com \"sk-ant-\".")
     if "pasta_saida" in novos:
         Path(novos["pasta_saida"]).mkdir(parents=True, exist_ok=True)
     config.salvar(novos)
@@ -163,6 +194,37 @@ def ler_custos():
 def zerar_custos():
     custos.zerar()
     return {"ok": True}
+
+
+# ================================================================ templates
+
+@app.get("/api/templates")
+def listar_templates():
+    return config.ler_json(config.ARQ_TEMPLATES, {})
+
+
+@app.put("/api/templates/{nome}")
+def salvar_template(nome: str, dados: dict):
+    if not re.fullmatch(r"[a-z0-9_\-]{2,30}", nome):
+        raise HTTPException(400, "Nome inválido (use letras minúsculas, números, - ou _)")
+    try:
+        template = Template.model_validate(dados)
+    except ValidationError as e:
+        raise HTTPException(400, f"Template inválido: {e.errors()[0]['loc']} {e.errors()[0]['msg']}")
+    if template.preset not in legendas.carregar_estilos():
+        raise HTTPException(400, f"Estilo de legenda '{template.preset}' não existe")
+    templates = listar_templates()
+    templates[nome] = template.model_dump()
+    config.gravar_json(config.ARQ_TEMPLATES, templates)
+    return templates
+
+
+@app.delete("/api/templates/{nome}")
+def excluir_template(nome: str):
+    templates = listar_templates()
+    templates.pop(nome, None)
+    config.gravar_json(config.ARQ_TEMPLATES, templates)
+    return templates
 
 
 # ================================================================ estilos e fontes
@@ -249,6 +311,22 @@ async def criar_projeto(
     caminho: str = Form(""),
     arquivo: UploadFile | None = File(None),
 ):
+    return await _criar(instrucao, modo, opcoes, caminho, arquivo, "curto")
+
+
+@app.post("/api/longos")
+async def criar_longo(
+    instrucao: str = Form(""),
+    modo: str = Form("falado"),
+    opcoes: str = Form("{}"),
+    caminho: str = Form(""),
+    arquivo: UploadFile | None = File(None),
+):
+    """Vídeo longo para o YouTube (aba "Vídeos longos"): enxugar o vídeo inteiro ou melhores momentos."""
+    return await _criar(instrucao, modo, opcoes, caminho, arquivo, "longo")
+
+
+async def _criar(instrucao: str, modo: str, opcoes: str, caminho: str, arquivo: UploadFile | None, tipo: str):
     if modo not in ("falado", "gameplay"):
         raise HTTPException(400, "Modo deve ser 'falado' ou 'gameplay'")
     try:
@@ -256,23 +334,32 @@ async def criar_projeto(
     except json.JSONDecodeError:
         raise HTTPException(400, "opcoes deve ser JSON")
 
+    livre = armazenamento.livre()
+    if livre < armazenamento.MINIMO_LIVRE:
+        raise HTTPException(507, f"Pouco espaço em disco ({livre / armazenamento.GB:.1f} GB livres). "
+                                 "Libere espaço em Configurações > Armazenamento antes de começar.")
     if arquivo is not None and arquivo.filename:
         ext = Path(arquivo.filename).suffix.lower()
         if ext not in EXTENSOES:
             raise HTTPException(400, f"Formato não suportado: {ext}")
-        meta = projetos.criar("", arquivo.filename, modo, instrucao, opc, ja_copiado=True)
-        destino = projetos.pasta(meta["id"]) / f"original{ext}"
-        with open(destino, "wb") as f:
-            while bloco := await arquivo.read(4 * 1024 * 1024):
-                f.write(bloco)
-        meta = projetos.atualizar(meta["id"], lambda m: m.update(video=str(destino)))
+        # Guarda pelo conteúdo: o mesmo vídeo enviado de novo não ocupa espaço outra vez
+        armazenamento.PASTA_VIDEOS.mkdir(parents=True, exist_ok=True)
+        temporario = armazenamento.PASTA_VIDEOS / f"envio_{uuid.uuid4().hex[:10]}.part"
+        try:
+            with open(temporario, "wb") as f:
+                while bloco := await arquivo.read(4 * 1024 * 1024):
+                    f.write(bloco)
+            destino = armazenamento.guardar_envio(temporario, ext)
+        finally:
+            temporario.unlink(missing_ok=True)
+        meta = projetos.criar(destino, arquivo.filename, modo, instrucao, opc, ja_copiado=True, tipo=tipo)
     elif caminho.strip():
         video = Path(caminho.strip().strip('"')).expanduser()
         if not video.is_file():
             raise HTTPException(400, f"Arquivo não encontrado: {video}")
         if video.suffix.lower() not in EXTENSOES:
             raise HTTPException(400, f"Formato não suportado: {video.suffix}")
-        meta = projetos.criar(video.resolve(), video.name, modo, instrucao, opc)
+        meta = projetos.criar(video.resolve(), video.name, modo, instrucao, opc, tipo=tipo)
     else:
         raise HTTPException(400, "Envie um arquivo de vídeo ou informe o caminho local")
 
@@ -281,8 +368,91 @@ async def criar_projeto(
 
 
 def _enfileirar_processamento(pid: str):
-    projetos.atualizar(pid, lambda m: m.update(status="fila", erro=None, progresso=0.0, etapas={}))
-    fila.enviar(pid, "processar", lambda ev: pipeline.processar(pid, ev))
+    meta = projetos.atualizar(pid, lambda m: m.update(status="fila", erro=None, progresso=0.0, etapas={}))
+    processar = longo.processar if meta.get("tipo") == "longo" else pipeline.processar
+    fila.enviar(pid, "processar", lambda ev: processar(pid, ev))
+
+
+@app.get("/api/projetos/{pid}/longo/{arquivo}")
+def arquivo_longo(pid: str, arquivo: str):
+    """Vídeo final, legenda .srt e texto do YouTube de um vídeo longo."""
+    lg = _meta(pid).get("longo") or {}
+    chave = {"video": "arquivo", "srt": "srt", "texto": "texto"}.get(arquivo)
+    if not chave or not lg.get(chave) or not Path(lg[chave]).exists():
+        raise HTTPException(404, "Arquivo não encontrado")
+    caminho = Path(lg[chave])
+    tipo = {"video": "video/mp4", "srt": "application/x-subrip", "texto": "text/plain; charset=utf-8"}[arquivo]
+    return FileResponse(caminho, media_type=tipo, filename=caminho.name)
+
+
+class Revisao(BaseModel):
+    """Escolhas da revisão de um vídeo longo (só os campos que mudaram precisam vir)."""
+    ritmo: str | None = None
+    abertura_ativa: bool | None = None
+    remocoes: list[dict] = []
+    capitulos: list[dict] = []
+    momentos: list[dict] = []
+
+
+@app.put("/api/projetos/{pid}/edicao")
+def revisar_longo(pid: str, dados: Revisao):
+    """Aplica a revisão (trechos que voltam, ritmo, capítulos, momentos) e remonta o vídeo sem chamar o Claude."""
+    meta = _meta(pid)
+    if meta.get("tipo") != "longo" or not meta.get("edicao"):
+        raise HTTPException(400, "Este projeto não tem uma edição para revisar")
+    if meta["status"] in ("fila", "processando"):
+        raise HTTPException(409, "O vídeo ainda está sendo processado")
+    longo.aplicar_revisao(pid, dados.model_dump())
+    projetos.atualizar(pid, lambda m: m.update(status="fila", erro=None, progresso=0.0))
+    fila.enviar(pid, "processar", lambda ev: longo.remontar(pid, ev))
+    return _publico(projetos.ler(pid))
+
+
+_trava_previa = threading.BoundedSemaphore(2)  # a lista pede várias prévias/quadros ao mesmo tempo
+
+
+@app.get("/api/projetos/{pid}/previa")
+def previa_trecho(pid: str, inicio: float, fim: float):
+    """Trecho do vídeo ORIGINAL (com 1 s de folga de cada lado) em MP4 leve, para ouvir/ver o que saiu."""
+    meta = _meta(pid)
+    inicio, fim = max(0.0, inicio - 1), fim + 1
+    if not 0 < fim - inicio <= 180:
+        raise HTTPException(400, "Trecho inválido")
+    arq = projetos.pasta(pid) / "tmp" / "previas" / f"{inicio:.2f}_{fim:.2f}.mp4"
+    if not arq.exists():
+        arq.parent.mkdir(parents=True, exist_ok=True)
+        with _trava_previa:
+            parcial = arq.with_name(arq.stem + "_parcial.mp4")
+            subprocess.run(["ffmpeg", "-nostdin", "-y", "-v", "error", "-ss", f"{inicio:.3f}", "-t", f"{fim - inicio:.3f}",
+                            "-i", meta["video"], "-vf", "scale=-2:360", "-c:v", "libx264", "-preset", "veryfast",
+                            "-crf", "28", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", str(parcial)],
+                           capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if not parcial.exists():
+                raise HTTPException(500, "Não consegui gerar a prévia")
+            parcial.replace(arq)
+    return FileResponse(arq, media_type="video/mp4")
+
+
+@app.get("/api/projetos/{pid}/quadro")
+def quadro_original(pid: str, t: float):
+    """Um quadro do vídeo original (miniatura dos trechos removidos na revisão)."""
+    meta = _meta(pid)
+    arq = projetos.pasta(pid) / "tmp" / "quadros" / f"{t:.1f}.jpg"
+    if not arq.exists():
+        with _trava_previa:
+            try:
+                ef.extrair_frame(meta["video"], t, arq, largura=240)
+            except Exception:
+                raise HTTPException(404)
+    return FileResponse(arq, media_type="image/jpeg")
+
+
+@app.get("/api/projetos/{pid}/longo/thumb/{k}")
+def thumb_longo(pid: str, k: int):
+    thumbs = (_meta(pid).get("longo") or {}).get("thumbs") or []
+    if not 0 <= k < len(thumbs) or not Path(thumbs[k]).exists():
+        raise HTTPException(404)
+    return FileResponse(thumbs[k], media_type="image/jpeg", filename=f"thumbnail_{k + 1}.jpg")
 
 
 @app.get("/api/projetos/{pid}")
@@ -292,10 +462,34 @@ def ver_projeto(pid: str):
 
 @app.delete("/api/projetos/{pid}")
 def excluir_projeto(pid: str, apagar_saida: bool = False):
-    _meta(pid)
+    meta = _meta(pid)
     fila.cancelar(pid)
     projetos.excluir(pid, apagar_saida)
+    video = Path(meta.get("video") or "")
+    if video.parent == armazenamento.PASTA_VIDEOS and not armazenamento.em_uso(video):
+        video.unlink(missing_ok=True)  # vídeo enviado que nenhum outro projeto usa
     return {"ok": True}
+
+
+# ================================================================ armazenamento
+
+def _ocupados() -> set[str]:
+    return {fila.atual["pid"]} if fila.atual else set()
+
+
+@app.get("/api/armazenamento")
+def ver_armazenamento():
+    return armazenamento.resumo()
+
+
+@app.post("/api/armazenamento/limpar")
+def limpar_temporarios():
+    return {"liberado": armazenamento.limpar_temporarios(_ocupados()), **armazenamento.resumo()}
+
+
+@app.post("/api/armazenamento/juntar")
+def juntar_repetidos():
+    return {"liberado": armazenamento.juntar_repetidos(_ocupados()), **armazenamento.resumo()}
 
 
 @app.post("/api/projetos/{pid}/cancelar")
@@ -308,11 +502,23 @@ def cancelar(pid: str):
 
 
 @app.post("/api/projetos/{pid}/reprocessar")
-def reprocessar(pid: str):
+def reprocessar(pid: str, do_zero: bool = False):
+    """Projeto pronto ("Refazer"): o Claude decide tudo de novo. Erro ou cancelado ("Tentar de novo"):
+    continua de onde parou, sem pagar de novo as respostas do Claude que já chegaram e sem renderizar de
+    novo o que já ficou pronto (clipes iguais; no vídeo longo, a edição salva e os blocos em cache).
+    do_zero=true: recomeça tudo, inclusive as decisões do Claude (se o problema foi a própria decisão)."""
     meta = _meta(pid)
     if meta["status"] in ("fila", "processando"):
         raise HTTPException(409, "O projeto já está sendo processado")
-    _enfileirar_processamento(pid)
+    retomar = meta["status"] in ("erro", "cancelado") and not do_zero
+    if not retomar:
+        llm.esquecer_respostas(pid)
+    projetos.atualizar(pid, lambda m: m.update(retomar=retomar))
+    if retomar and meta.get("tipo") == "longo" and meta.get("edicao"):
+        projetos.atualizar(pid, lambda m: m.update(status="fila", erro=None, progresso=0.0))
+        fila.enviar(pid, "processar", lambda ev: longo.remontar(pid, ev))
+    else:
+        _enfileirar_processamento(pid)
     return _publico(projetos.ler(pid))
 
 
@@ -390,7 +596,8 @@ class EdicaoClip(BaseModel):
 
 
 CHAVES_CONFIG = {"formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom",
-                 "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica"}
+                 "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura",
+                 "limpar_voz"}
 
 
 @app.patch("/api/projetos/{pid}/clips/{cid}")
@@ -429,6 +636,29 @@ def renderizar(pid: str, cid: str):
     _meta(pid)
     projetos.atualizar(pid, lambda m: projetos.clip(m, cid).update(status="fila", progresso=0.0))
     fila.enviar(pid, "renderizar", lambda ev: pipeline.renderizar_clip(pid, cid, cancelado=ev), cid)
+    return _publico(projetos.ler(pid))
+
+
+@app.post("/api/projetos/{pid}/refazer-arquivos")
+def refazer_arquivos(pid: str):
+    """Refaz os vídeos que sumiram da pasta de saída (apagados ou movidos), sem chamar o Claude:
+    clipes são renderizados de novo e o vídeo longo é remontado com a edição salva."""
+    meta = _meta(pid)
+    if meta["status"] in ("fila", "processando"):
+        raise HTTPException(409, "O projeto já está sendo processado")
+    if not Path(meta["video"]).exists():
+        raise HTTPException(400, "O vídeo de origem também não existe mais: não dá para refazer")
+    if meta.get("tipo") == "longo":
+        if not meta.get("edicao"):
+            _enfileirar_processamento(pid)  # projeto antigo, sem a edição salva: refaz tudo
+        else:
+            projetos.atualizar(pid, lambda m: m.update(status="fila", erro=None, progresso=0.0))
+            fila.enviar(pid, "processar", lambda ev: longo.remontar(pid, ev))
+        return _publico(projetos.ler(pid))
+    faltando = [c["id"] for c in meta["clips"] if c.get("arquivo") and not Path(c["arquivo"]).exists()]
+    for cid in faltando:
+        projetos.atualizar(pid, lambda m, cid=cid: projetos.clip(m, cid).update(status="fila", progresso=0.0))
+        fila.enviar(pid, "renderizar", lambda ev, cid=cid: pipeline.renderizar_clip(pid, cid, cancelado=ev), cid)
     return _publico(projetos.ler(pid))
 
 
@@ -486,9 +716,11 @@ def baixar_zip(pid: str, clips: str = ""):
     if not arquivos:
         raise HTTPException(404, "Nenhum clipe pronto para baixar")
     tmp = Path(tempfile.mkdtemp()) / f"{meta['nome']}_clipes.zip"
+    escolhidos = [c for c in meta["clips"] if c["id"] in ids and c.get("arquivo") and Path(c["arquivo"]).exists()]
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as z:  # mp4 já é comprimido
         for arq in arquivos:
             z.write(arq, arq.name)
+        z.writestr("posts.txt", pipeline.texto_dos_posts(escolhidos))
     return FileResponse(tmp, filename=tmp.name, media_type="application/zip",
                         background=BackgroundTask(shutil.rmtree, tmp.parent, True))
 
@@ -499,6 +731,47 @@ def abrir_pasta(pid: str):
     meta = _meta(pid)
     if meta.get("saida_dir") and Path(meta["saida_dir"]).exists():
         subprocess.Popen(["explorer", meta["saida_dir"]])
+    return {"ok": True}
+
+
+@app.get("/api/audio")
+def biblioteca_audio():
+    """Músicas por clima e quantidade de efeitos da biblioteca local."""
+    return biblioteca.resumo()
+
+
+@app.post("/api/audio/pacote")
+def baixar_pacote_musicas():
+    """Baixa em segundo plano o pacote inicial de músicas CC0 (acompanhe por GET /api/audio)."""
+    biblioteca.preparar()
+    faltando = biblioteca.pacote_faltando()
+    if faltando and armazenamento.livre() < armazenamento.MINIMO_LIVRE:
+        raise HTTPException(507, "Pouco espaço em disco para baixar as músicas.")
+    if faltando:
+        biblioteca.baixar_pacote()
+    return biblioteca.resumo()
+
+
+@app.get("/api/audio/arquivo")
+def ouvir_audio(caminho: str):
+    """Toca uma faixa da biblioteca (para ouvir antes de usar)."""
+    arq = biblioteca.arquivo_da_biblioteca(caminho)
+    if not arq:
+        raise HTTPException(404, "Arquivo fora da biblioteca de áudio")
+    return FileResponse(arq)
+
+
+@app.delete("/api/audio/arquivo")
+def excluir_audio(caminho: str):
+    if not biblioteca.excluir(caminho):
+        raise HTTPException(404, "Arquivo fora da biblioteca de áudio")
+    return biblioteca.resumo()
+
+
+@app.post("/api/audio/abrir-pasta")
+def abrir_pasta_audio():
+    biblioteca.preparar()
+    subprocess.Popen(["explorer", str(biblioteca.PASTA_AUDIO)])
     return {"ok": True}
 
 

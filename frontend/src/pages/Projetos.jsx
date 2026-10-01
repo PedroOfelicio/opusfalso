@@ -1,7 +1,7 @@
 // Meus projetos: grade de cards com busca e filtro por status.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Clapperboard, Gamepad2, Mic, Plus, Search, Trash2 } from "lucide-react";
+import { Clapperboard, Film, Gamepad2, Mic, Plus, Search, Trash2 } from "lucide-react";
 import { api, formatarData, formatarDuracao } from "../api";
 import { corDaNota } from "../components/ScoreBadge";
 import { Alternador, Botao, Chip, Confirmar, EstadoErro, EstadoVazio, Esqueleto, usePolling, useAvisar } from "../components/ui";
@@ -105,7 +105,7 @@ export default function Projetos() {
             const st = STATUS[p.status] || STATUS.cancelado;
             const rodando = ["fila", "processando"].includes(p.status);
             return (
-              <Link key={p.id} to={`/projetos/${p.id}`} className="group cartao overflow-hidden hover:border-borda-forte hover:-translate-y-0.5 hover:shadow-suave transition-all animate-surgir">
+              <Link key={p.id} to={p.tipo === "longo" ? `/longos/${p.id}` : `/projetos/${p.id}`} className="group cartao overflow-hidden hover:border-borda-forte hover:-translate-y-0.5 hover:shadow-suave transition-all animate-surgir">
                 <div className="relative aspect-video bg-card-2 overflow-hidden">
                   <img src={p.thumb_url} alt="" className="size-full object-cover group-hover:scale-[1.03] transition-transform duration-500" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
                   <span className={`absolute top-3 left-3 text-[11px] font-semibold px-2 py-0.5 rounded-md backdrop-blur ${st.cor}`}>{st.rotulo}</span>
@@ -137,7 +137,12 @@ export default function Projetos() {
                       {formatarData(p.criado_em)}
                     </span>
                     <span className="ml-auto inline-flex items-center gap-1.5">
-                      {rodando ? `${Math.round((p.progresso || 0) * 100)}%` : `${p.num_clips} clipe(s)`}
+                      {p.tipo === "longo" && <Film className="size-3.5 text-roxo" />}
+                      {rodando
+                        ? `${Math.round((p.progresso || 0) * 100)}%`
+                        : p.tipo === "longo"
+                          ? p.duracao_final ? `Vídeo longo · ${formatarDuracao(p.duracao_final)}` : "Vídeo longo"
+                          : `${p.num_clips} clipe(s)`}
                       {p.num_clips > 0 && <span className="size-2 rounded-full" style={{ background: corDaNota(p.melhor_nota) }} title={`Melhor nota: ${p.melhor_nota}`} />}
                     </span>
                   </div>
