@@ -109,7 +109,8 @@ def _publico(meta: dict) -> dict:
         c["video_url"] = f"/api/projetos/{pid}/clips/{c['id']}/video?v={v}" if c.get("arquivo") and not c["sem_arquivo"] else None
         c["thumb_url"] = f"/api/projetos/{pid}/clips/{c['id']}/thumb?v={v}" if c.get("thumb") else None
         c["config_efetiva"] = pipeline.config_clip(meta, c) if meta.get("plano") else None
-        for chave in ("arquivo", "thumb", "corte_assinatura"):
+        c["capa_url"] = f"/api/projetos/{pid}/clips/{c['id']}/capa?v={v}" if c.get("capa") else None
+        for chave in ("arquivo", "thumb", "corte_assinatura", "capa"):
             c.pop(chave, None)
     m["arquivos_sumidos"] = sumidos
     lg = m.get("longo")
@@ -630,6 +631,18 @@ def video_clip(pid: str, cid: str, download: bool = False):
     return FileResponse(arq, media_type="video/mp4")
 
 
+@app.get("/api/projetos/{pid}/clips/{cid}/capa")
+def capa_clip(pid: str, cid: str, download: bool = False):
+    meta = _meta(pid)
+    try:
+        c = projetos.clip(meta, cid)
+    except KeyError:
+        raise HTTPException(404)
+    if not c.get("capa") or not Path(c["capa"]).exists():
+        raise HTTPException(404, "Este clipe ainda não tem capa (exporte de novo para gerar)")
+    return FileResponse(c["capa"], media_type="image/jpeg", filename=Path(c["capa"]).name if download else None)
+
+
 @app.get("/api/projetos/{pid}/clips/{cid}/thumb")
 def thumb_clip(pid: str, cid: str):
     meta = _meta(pid)
@@ -650,7 +663,7 @@ class EdicaoClip(BaseModel):
     palavras_editadas: dict[str, str] | None = None
 
 
-CHAVES_CONFIG = {"look", "transicao", "zoom_forca", "impacto", "broll","formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom",
+CHAVES_CONFIG = {"look", "transicao", "zoom_forca", "impacto", "broll", "reacoes", "idioma_legenda","formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom",
                  "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura",
                  "limpar_voz"}
 
@@ -775,6 +788,9 @@ def baixar_zip(pid: str, clips: str = ""):
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as z:  # mp4 já é comprimido
         for arq in arquivos:
             z.write(arq, arq.name)
+        for c in escolhidos:  # capas junto
+            if c.get("capa") and Path(c["capa"]).exists():
+                z.write(c["capa"], Path(c["capa"]).name)
         z.writestr("posts.txt", pipeline.texto_dos_posts(escolhidos))
     return FileResponse(tmp, filename=tmp.name, media_type="application/zip",
                         background=BackgroundTask(shutil.rmtree, tmp.parent, True))

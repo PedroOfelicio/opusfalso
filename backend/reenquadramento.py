@@ -27,6 +27,7 @@ import cv2
 import numpy as np
 
 import config
+import enfeites
 from config import Cancelado
 from editor_ffmpeg import FPS_SAIDA, _SEM_JANELA, encoder_video
 
@@ -421,6 +422,7 @@ class OpcoesRender:
     impacto: str = "nenhum"            # efeito nos picos de ação
     impactos: list = field(default_factory=list)   # instantes dos picos (tempo do clipe)
     broll: list = field(default_factory=list)      # [(início, fim, arquivo)]: vídeo de apoio cobrindo a tela
+    reacoes: list = field(default_factory=list)    # [(início, figurinha BGRA)]: texto de reação no pico
 
 
 def _hex_bgr(cor: str):
@@ -506,6 +508,8 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
                 quadro = _sobrepor_broll(quadro, i / FPS_SAIDA, opc.broll, brolls, LW, LH)
             if i in efeitos:
                 quadro = _aplicar_efeito(quadro, *efeitos[i], i)
+            for t0, fig in opc.reacoes:
+                quadro = enfeites.compor_reacao(quadro, fig, i / FPS_SAIDA, t0)
             if barra_cor:
                 cv2.rectangle(quadro, (0, 0), (int(LW * (i + 1) / total), barra_alt), barra_cor, -1)
             proc.stdin.write(quadro.tobytes())

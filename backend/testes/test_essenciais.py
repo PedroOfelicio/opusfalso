@@ -430,3 +430,56 @@ class BRollDeApoio(unittest.TestCase):
         self.assertEqual(rq._sobrepor_broll(fundo, 4.0, lista, abertos, 1080, 1920).mean(), 0)      # antes
         self.assertAlmostEqual(rq._sobrepor_broll(fundo, 6.0, lista, abertos, 1080, 1920).mean(), 200, delta=1)
         self.assertLess(rq._sobrepor_broll(fundo, 5.05, lista, abertos, 1080, 1920).mean(), 100)    # entrando
+
+
+# ---------------------------------------------------------------- reações, capa, tradução, bloco longo
+
+class EnfeitesETraducao(Temporario):
+    def test_figurinha_e_pop(self):
+        import numpy as np
+        import enfeites
+        fig = enfeites.figurinha_reacao("QUE ISSO?!", 1080)
+        self.assertEqual(fig.shape[2], 4)
+        self.assertLess(fig.shape[1], 1080)
+        quadro = np.zeros((1920, 1080, 3), dtype=np.uint8)
+        self.assertEqual(enfeites.compor_reacao(quadro, fig, 0.5, 2.0).max(), 0)   # antes: nada
+        self.assertGreater(enfeites.compor_reacao(quadro, fig, 2.5, 2.0).max(), 200)  # durante: aparece
+        self.assertEqual(enfeites.compor_reacao(quadro, fig, 3.5, 2.0).max(), 0)   # depois de 1,4 s: some
+
+    def test_capa_vertical(self):
+        import numpy as np
+        import enfeites
+        quadro = np.full((720, 1280, 3), 90, dtype=np.uint8)
+        capa = enfeites.capa_vertical(quadro, "Clutch na faca que ninguém esperava", 0.3)
+        self.assertEqual(capa.size, (1080, 1920))
+
+    def test_frases_e_tempo_da_traducao(self):
+        import traducao
+        palavras = [{"p": "Eu", "i": 0.0, "f": 0.2}, {"p": "ganhei.", "i": 0.2, "f": 0.6, "enfase": True},
+                    {"p": "Depois", "i": 2.0, "f": 2.3}, {"p": "perdi", "i": 2.3, "f": 2.8}]
+        grupos = traducao.frases(palavras)
+        self.assertEqual([len(g) for g in grupos], [2, 2])
+        novas = traducao.redistribuir(grupos[0], "I *won*.")
+        self.assertEqual([w["p"] for w in novas], ["I", "won."])
+        self.assertEqual((novas[0]["i"], novas[-1]["f"]), (0.0, 0.6))
+        self.assertTrue(novas[1]["enfase"])
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg não encontrado")
+    def test_bloco_longo_com_cor_e_broll(self):
+        import direcao
+        video, apoio, saida = self.pasta / "v.mp4", self.pasta / "b.mp4", self.pasta / "bloco.mkv"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=640x360:r=30:d=8", "-f", "lavfi",
+                        "-i", "sine=f=300:d=8", "-shortest", "-c:v", "libx264", "-c:a", "aac", str(video)], check=True)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=red:s=320x240:r=25:d=2",
+                        "-c:v", "libx264", str(apoio)], check=True)
+        info = ef.sondar(video)
+        dur = ef.renderizar_bloco(video, [(0.0, 3.0), (4.0, 7.0)], saida, info, look=direcao.filtro_look("cinema"),
+                                  brolls=[(1.0, 3.5, str(apoio))])
+        self.assertAlmostEqual(dur, 6.0, delta=0.05)
+        self.assertAlmostEqual(ef.sondar(saida)["duracao"], 6.0, delta=0.1)
+        quadro = self.pasta / "q.png"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "2.0", "-i", str(saida), "-frames:v", "1", str(quadro)], check=True)
+        from PIL import Image
+        r, g, b = Image.open(quadro).convert("RGB").resize((1, 1)).getpixel((0, 0))
+        self.assertGreater(r, 120)  # no meio do B-roll a tela é o vídeo vermelho
+        self.assertLess(g, 80)

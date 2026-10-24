@@ -133,6 +133,12 @@ class BRoll(BaseModel):
         return self
 
 
+class Reacao(BaseModel):
+    """Texto de reação que pula na tela num instante (s do vídeo original): "ESPERA...", "KKKKK"."""
+    t: float = Field(ge=0)
+    texto: str = Field(min_length=1, max_length=18)
+
+
 class Emoji(BaseModel):
     palavra: str
     emoji: str
@@ -192,6 +198,12 @@ class Corte(BaseModel):
     hashtags: list[str] = Field(default_factory=list)
     direcao: dict = Field(default_factory=dict)  # direção de arte do clipe (validada em direcao.valida)
     broll: list[BRoll] = Field(default_factory=list)  # vídeos de apoio (só fala)
+    reacoes: list[Reacao] = Field(default_factory=list)  # textos de reação no pico ("ESPERA...")
+
+    @field_validator("reacoes", mode="before")
+    @classmethod
+    def _reacoes(cls, v):
+        return lista_tolerante(Reacao, v)[:2]
 
     @field_validator("direcao", mode="before")
     @classmethod
@@ -271,6 +283,12 @@ class EscolhaGameplay(BaseModel):
     legenda_post: str = ""
     hashtags: list[str] = Field(default_factory=list)
     direcao: dict = Field(default_factory=dict)  # direção de arte do clipe (validada em direcao.valida)
+    reacoes: list[Reacao] = Field(default_factory=list)  # textos de reação no pico ("ESPERA...")
+
+    @field_validator("reacoes", mode="before")
+    @classmethod
+    def _reacoes(cls, v):
+        return lista_tolerante(Reacao, v)[:2]
 
     @field_validator("direcao", mode="before")
     @classmethod
@@ -444,6 +462,13 @@ class EdicaoLonga(BaseModel):
     texto_thumb: str = ""                                               # 2-4 palavras para a thumbnail
     correcoes: list[Correcao] = Field(default_factory=list)            # erros da transcrição automática
     nao_atendido: list[str] = Field(default_factory=list)
+    look: str = ""                                                      # cor do vídeo inteiro (direcao.LOOKS)
+    broll: list[BRoll] = Field(default_factory=list)                   # vídeos de apoio
+
+    @field_validator("broll", mode="before")
+    @classmethod
+    def _broll(cls, v):
+        return lista_tolerante(BRoll, v)[:30]
 
     @field_validator("remover", mode="before")
     @classmethod

@@ -239,7 +239,8 @@ Responda APENAS com JSON válido, sem markdown, no formato:
              "remover": [[20.1, 23.4]], "correcoes": [{"de": "palavra errada", "para": "palavra certa"}],
              "gancho": [31.2, 34.0], "legenda_post": "...", "hashtags": ["#..."],
              "direcao": {"preset": "...", "cor": null, "look": "...", "transicao": "...", "zoom": "medio", "impacto": "nenhum"},
-             "broll": [{"inicio": 40.2, "fim": 42.8, "busca": "stack of money"}]}]}
+             "broll": [{"inicio": 40.2, "fim": 42.8, "busca": "stack of money"}],
+             "reacoes": [{"t": 44.1, "texto": "ESPERA..."}]}]}
 
 Critérios:
 - Cada clipe deve fazer sentido SOZINHO: começa numa frase que prende atenção (gancho) e termina num pensamento completo.
@@ -270,6 +271,10 @@ Critérios:
   transcrição, enquanto a frase é dita), nunca nos 3 primeiros segundos nem no momento mais emocional, em
   que o rosto importa. busca: 2 a 4 palavras em INGLÊS, concretas, do jeito que se busca num banco de vídeos
   ("man looking in mirror", "startup office team", "sports car driving").
+- reacoes: 0 a 2 textos de reação que pulam na tela por ~1,4 s no instante t (segundos do vídeo, dentro do
+  clipe e depois dos 4 primeiros segundos), como um editor de cortes faria: no susto, na virada, na fala
+  absurda, na risada. Curtos (até 18 caracteres), no idioma do vídeo, sem emoji: "ESPERA...", "KKKKKK",
+  "QUE ISSO?!", "CLUTCH!", "ELE FALOU MESMO". Só onde a reação aumenta a graça ou a tensão; vazio se não houver.
 - Ordene do melhor para o pior."""
 
 
@@ -364,7 +369,8 @@ Escolha os melhores e responda APENAS com JSON válido, sem markdown:
                "palavras_enfase": ["..."], "emojis": [{"palavra": "...", "emoji": "💀"}], "clima": "energetica",
                "remover": [[110.0, 114.5]], "correcoes": [{"de": "meu jeep", "para": "meu Deus"}],
                "legenda_post": "...", "hashtags": ["#..."],
-               "direcao": {"preset": "...", "cor": null, "look": "...", "transicao": "...", "zoom": "forte", "impacto": "tremor"}}]}
+               "direcao": {"preset": "...", "cor": null, "look": "...", "transicao": "...", "zoom": "forte", "impacto": "tremor"},
+               "reacoes": [{"t": 118.4, "texto": "QUE ISSO?!"}]}]}
 - Use os quadros para ver o que acontece de verdade. DESCARTE (não inclua) candidatos sem ação real:
   menu, loja/fase de compra, loading, mapa, tela parada, espectador, jogador só andando.
 - inicio/fim: segundos do vídeo, dentro da janela do candidato, respeitando a duração pedida.
@@ -386,6 +392,10 @@ Escolha os melhores e responda APENAS com JSON válido, sem markdown:
   (1ª pessoa ou neutro; nunca "o jogador"). Sem hashtags.
 - hashtags: 3 a 5: o jogo (se der para identificar pela tela ou pela fala), o tipo de jogada e o nicho.
   Sem genéricas como #fyp, #viral, #foryou.
+- reacoes: 0 a 2 textos de reação que pulam na tela por ~1,4 s no instante t (segundos do vídeo, dentro do
+  clipe e depois dos 4 primeiros segundos), como um editor de cortes faria: no susto, na virada, na fala
+  absurda, na risada. Curtos (até 18 caracteres), no idioma do vídeo, sem emoji: "ESPERA...", "KKKKKK",
+  "QUE ISSO?!", "CLUTCH!", "ELE FALOU MESMO". Só onde a reação aumenta a graça ou a tensão; vazio se não houver.
 - Ordene do melhor para o pior."""
 
 
@@ -467,7 +477,8 @@ Recebe a transcrição com tempos (segundos do vídeo original) e devolve as DEC
 Responda APENAS com JSON válido, sem markdown:
 {"remover": [{"inicio": a, "fim": b, "motivo": "take repetido"}], "capitulos": [{"inicio": 0, "titulo": "..."}],
  "momentos": [{"inicio": a, "fim": b, "titulo": "..."}], "abertura": [a, b], "titulos": ["...", "...", "..."],
- "descricao": "...", "tags": ["..."], "texto_thumb": "...", "correcoes": [{"de": "...", "para": "..."}], "nao_atendido": []}
+ "descricao": "...", "tags": ["..."], "texto_thumb": "...", "correcoes": [{"de": "...", "para": "..."}], "nao_atendido": [],
+ "look": "natural", "broll": [{"inicio": a, "fim": b, "busca": "..."}]}
 
 MODO "enxugar" (o vídeo inteiro, mais enxuto):
 - remover: erros de gravação e enrolação. Frase repetida ou recomeçada: fica a ÚLTIMA tentativa completa, as
@@ -494,7 +505,14 @@ NOS DOIS MODOS:
 - texto_thumb: 2 a 4 palavras de impacto para escrever na thumbnail (sem pontuação final), no idioma do vídeo.
 - correcoes: erros evidentes da transcrição automática (nome próprio, termo técnico, palavra sem sentido no
   contexto), copiando "de" exatamente como está na transcrição. Vazio se não houver.
-- nao_atendido: partes do pedido do usuário que não dá para fazer só cortando o vídeo."""
+- nao_atendido: partes do pedido do usuário que não dá para fazer só cortando o vídeo.
+- look: a cor do vídeo inteiro, pelo tom do conteúdo. Um de: """ + "; ".join(
+    f'"{k}" ({v[0]})' for k, v in direcao.LOOKS.items()) + """. Na dúvida, "natural".
+- broll: vídeos de apoio de banco de imagens (cada um cobre a tela por 2 a 4 s, de inicio a fim, nos tempos da
+  transcrição, enquanto a frase é dita), quando a fala cita algo concreto que dá para MOSTRAR: objeto, lugar,
+  ação, profissão, tecnologia ("comprei um carro", "fui pra praia", "a empresa cresceu"). No máximo 1 a cada
+  1-2 minutos de vídeo e nunca em trechos removidos. busca: 2 a 4 palavras em INGLÊS, concretas ("sports car
+  driving", "startup office team"). Vazio se o vídeo for todo abstrato."""
 
 
 def decidir_longo(transcricao: dict, modo: str, instrucao: str = "", alvo_min: float | None = None,

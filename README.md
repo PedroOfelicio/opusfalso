@@ -85,6 +85,14 @@ na tela, na seção "Não atendido".
   de zoom; os cortes de silêncio não ganham transição), força do zoom e efeito no pico de ação do gameplay.
   Sem o Claude, vale o padrão do clima. Escolher um template desliga o diretor (visual fixo); no editor, a aba
   Enquadramento mostra e deixa trocar cada escolha. Custo: ~US$ 0,001 por clipe.
+- **B-roll** (fala, clipes e vídeos longos): o Claude marca onde a fala cita algo que dá para mostrar e o
+  que buscar; o app baixa do Pixabay (ou Pexels), confere as etiquetas (pelo menos 2 palavras da busca, senão
+  fica sem B-roll) e cobre a tela por 2-4 s com fusão. Chave grátis em Configurações. `backend/broll.py`.
+- **Textos de reação** ("QUE ISSO?!", "KKKKK") que pulam na tela no pico, desenhados pelo app (sem imagem de
+  fora). **Capa vertical** 1080x1920 de cada clipe (melhor quadro + título), no card e no zip. `enfeites.py`.
+- **Legenda traduzida** (inglês, espanhol, português...): frases traduzidas pelo Claude no tempo da fala
+  original, com a ênfase preservada; ~US$ 0,005 por clipe. `traducao.py`.
+- **Vídeo longo**: cor pelo clima (look escolhido pelo Claude) e B-roll, aplicados no render dos blocos.
 - **Link do YouTube** em vez do arquivo (clipes curtos e vídeos longos): o app baixa com o `yt-dlp` (até
   1080p), processa e **apaga o original no fim**, então o bruto da live não fica ocupando o disco. Se depois
   for preciso de novo (reexportar um clipe, regenerar, revisar ou remontar o vídeo longo), ele é baixado de

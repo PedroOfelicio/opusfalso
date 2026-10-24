@@ -8,7 +8,7 @@ import { api, CLIMAS, formatarTempoPreciso, MODO_DEMO } from "../api";
 import ScoreBadge from "../components/ScoreBadge";
 import { Alternador, Aviso, Botao, EstadoErro, Esqueleto, Segmentado, usePolling, useAvisar } from "../components/ui";
 
-const CHAVES = ["look", "transicao", "zoom_forca", "impacto", "broll", "formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom", "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura", "limpar_voz"];
+const CHAVES = ["look", "transicao", "zoom_forca", "impacto", "broll", "reacoes", "idioma_legenda", "formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom", "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura", "limpar_voz"];
 const CORES_RAPIDAS = ["#FFE600", "#22FF6B", "#3B82F6", "#FF4FD8", "#FF8A00", "#FFFFFF"];
 const LAYOUTS = [
   { id: "auto", rotulo: "Automático", texto: "Escolhe conforme o vídeo e os rostos encontrados" },
@@ -263,6 +263,18 @@ export default function Editor() {
           <div className="flex-1 overflow-y-auto p-5 space-y-6">
             {aba === "legendas" && (
               <>
+                <label className="block text-xs text-suave">
+                  Idioma da legenda
+                  <select value={cfg.idioma_legenda || ""} onChange={(e) => mudarConfig("idioma_legenda", e.target.value)} className="campo mt-1 !py-1.5 text-sm cursor-pointer">
+                    <option value="">Mesmo idioma do vídeo</option>
+                <option value="en">Inglês</option>
+                <option value="es">Espanhol</option>
+                <option value="pt">Português</option>
+                <option value="fr">Francês</option>
+                <option value="it">Italiano</option>
+                <option value="de">Alemão</option>
+                  </select>
+                </label>
                 <Alternador ativo={!!cfg.legenda_ativa} aoMudar={(v) => mudarConfig("legenda_ativa", v)} rotulo="Mostrar legenda" />
                 <div>
                   <div className="rotulo mb-2">Estilo</div>
@@ -384,6 +396,14 @@ export default function Editor() {
                   </div>
                 )}
                 <Alternador ativo={!!cfg.zoom} aoMudar={(v) => mudarConfig("zoom", v)} rotulo="Zoom automático" descricao="Aproxima suavemente nas palavras de ênfase e nos picos (gameplay)" />
+                {clip.reacoes?.length > 0 && (
+                  <Alternador
+                    ativo={!!cfg.reacoes}
+                    aoMudar={(v) => mudarConfig("reacoes", v)}
+                    rotulo="Textos de reação"
+                    descricao={clip.reacoes.map((r) => `“${r.texto}”`).join(", ")}
+                  />
+                )}
                 {clip.broll?.length > 0 && (
                   <Alternador
                     ativo={!!cfg.broll}

@@ -27,7 +27,9 @@ from pathlib import Path
 
 import analise_audio
 import biblioteca_audio as biblioteca
+import broll
 import config
+import direcao
 import custos
 import editor_ffmpeg as ef
 import legendas
@@ -70,6 +72,8 @@ PADROES = {
     "ver_imagens": True,       # gameplay: o Claude olha os quadros (menus, fase de compra, tempo parado)
     "cortar_parado": True,     # gameplay: tira andanças longas sem nada acontecendo
     "remover_erros": True,     # fala: aplica os cortes de erros de gravação (senão ficam só como sugestão)
+    "diretor": True,           # cor do vídeo escolhida pelo Claude pelo tom do conteúdo (look)
+    "broll": True,             # fala: vídeos de apoio do Pixabay/Pexels quando a fala cita algo concreto
 }
 
 
@@ -228,6 +232,8 @@ def _decidir_falado(pid, meta, opc, transcricao, prog) -> dict:
         "titulos": ed.titulos if ed else [], "descricao": ed.descricao if ed else "",
         "tags": ed.tags if ed else [], "texto_thumb": ed.texto_thumb if ed else "",
         "nao_atendido": ed.nao_atendido if ed else [], "zoom_fator": 1.15,
+        "look": ed.look if ed and ed.look in direcao.LOOKS else "natural",
+        "broll": [b.model_dump() for b in ed.broll] if ed else [],
     }
 
 
@@ -346,7 +352,8 @@ def _decidir_gameplay(pid, meta, opc, transcricao, analise, prog, cancelado) -> 
 
     edl = {"tipo": "gameplay", "modo_longo": modo, "ritmo": None, "remocoes": remocoes, "momentos": momentos,
            "capitulos": capitulos, "abertura": None, "abertura_ativa": bool(opc["abertura"]), "correcoes": [],
-           "titulos": [], "descricao": "", "tags": [], "texto_thumb": "", "nao_atendido": [], "zoom_fator": 1.1}
+           "titulos": [], "descricao": "", "tags": [], "texto_thumb": "", "nao_atendido": [], "zoom_fator": 1.1,
+           "look": "vibrante", "broll": []}  # gameplay: cor forte; a tela do jogo já é o conteúdo
     itens = capitulos if modo == "enxugar" else momentos
     try:
         r = llm.titulos_gameplay_longo(_capitulos_com_fala(itens, modo, transcricao), projeto_id=pid)
@@ -610,10 +617,12 @@ def _montar(pid, meta, opc, edl, transcricao, info, prog, cancelado) -> dict:
                                bl.get("titulo"), bool(opc["legenda"]))
             texto_ass = rascunho.read_text(encoding="utf-8-sig")
             rascunho.unlink(missing_ok=True)
+        look = direcao.filtro_look(edl.get("look")) if opc.get("diretor") else None
+        apoio = _brolls_bloco(edl, opc, bl, pid)
         chave = hashlib.sha1(repr((str(video), bl["trechos"], zoom, texto_ass, bool(bl.get("flash")),
-                                   largura, altura)).encode("utf-8")).hexdigest()[:16]
-        preparados.append({"bloco": bl, "dur": dur, "zoom": zoom, "pal": pal, "ass": texto_ass,
-                           "arq": pasta / f"bloco_{chave}.mkv"})
+                                   largura, altura, look, apoio)).encode("utf-8")).hexdigest()[:16]
+        preparados.append({"bloco": bl, "dur": dur, "zoom": zoom, "pal": pal, "ass": texto_ass, "look": look,
+                           "brolls": apoio, "arq": pasta / f"bloco_{chave}.mkv"})
 
     # 2) Renderiza só os que não estão no cache
     pendentes = [p for p in preparados if not p["arq"].exists()]
@@ -632,7 +641,7 @@ def _montar(pid, meta, opc, edl, transcricao, info, prog, cancelado) -> dict:
         parcial = p["arq"].with_name(p["arq"].stem + "_parcial.mkv")
         ef.renderizar_bloco(
             video, p["bloco"]["trechos"], parcial, info, zoom=p["zoom"], arquivo_ass=ass_rel,
-            flash=bool(p["bloco"].get("flash")),
+            flash=bool(p["bloco"].get("flash")), look=p["look"], brolls=p["brolls"],
             progresso=lambda x, feito=feito, dur=p["dur"], k=k: prog(
                 0.9 * (feito + x * dur) / total, f"Bloco {k + 1} de {len(preparados)}"),
             cancelado=cancelado)
@@ -673,6 +682,32 @@ def _montar(pid, meta, opc, edl, transcricao, info, prog, cancelado) -> dict:
     log.info("Vídeo longo: %d blocos (%d do cache), %.1f s", len(blocos), reaproveitados, duracao)
     return {"arquivo": saida, "duracao": duracao, "capitulos": capitulos, "palavras": palavras_finais,
             "cortes": cortes, "blocos": blocos, "offsets": offsets, "reaproveitados": reaproveitados}
+
+
+_avisou_broll: set[str] = set()
+
+
+def _brolls_bloco(edl: dict, opc: dict, bloco: dict, pid: str) -> list[tuple[float, float, str]]:
+    """Vídeos de apoio que caem neste bloco, no tempo do bloco: (início, fim, arquivo). Busca com cache."""
+    if not opc.get("broll") or not edl.get("broll") or bloco["tipo"] == "abertura":
+        return []
+    if not broll.chave():
+        if pid not in _avisou_broll:
+            _avisou_broll.add(pid)
+            pipeline._aviso(pid, "B-roll pedido, mas falta a chave grátis do Pixabay (Configurações > B-roll).")
+        return []
+    saida = []
+    for b in edl["broll"]:
+        posicoes = ef.mapear_intervalo(b["inicio"], b["fim"], bloco["trechos"])
+        if not posicoes:
+            continue
+        a, f = posicoes[0]
+        if f - a < 1.5 or any(a < y and f > x for x, y, _ in saida):
+            continue  # cortado pela edição ou colado em outro
+        arquivo = broll.buscar(b["busca"], "landscape")
+        if arquivo:
+            saida.append((round(a, 3), round(f, 3), str(arquivo)))
+    return saida
 
 
 def _substituir(novo: Path, destino: Path) -> Path:

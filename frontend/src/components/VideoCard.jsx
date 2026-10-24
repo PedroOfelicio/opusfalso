@@ -1,7 +1,7 @@
 // Card de um clipe: preview ao passar o mouse, nota viral, título editável e ações.
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Copy, Download, Loader2, Pencil, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
+import { Check, Copy, Download, ImageDown, Loader2, Pencil, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import { formatarDuracao } from "../api";
 import ScoreBadge from "./ScoreBadge";
 import { Dica } from "./ui";
@@ -131,6 +131,13 @@ export default function VideoCard({ clip, projetoId, selecionado, aoSelecionar, 
               <Download className="size-4" />
             </a>
           </Dica>
+          {clip.capa_url && (
+            <Dica texto="Baixar a capa (1080x1920, com o título)" lado="cima">
+              <a href={`${clip.capa_url.split("?")[0]}?download=true`} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-white/5">
+                <ImageDown className="size-4" />
+              </a>
+            </Dica>
+          )}
           <Dica texto="Editar" lado="cima">
             <Link to={`/projetos/${projetoId}/clips/${clip.id}`} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-white/5">
               <Pencil className="size-4" />

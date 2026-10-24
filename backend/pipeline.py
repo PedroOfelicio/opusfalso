@@ -22,6 +22,8 @@ import biblioteca_audio as biblioteca
 import config
 import broll
 import custos
+import enfeites
+import traducao
 import direcao
 import editor_ffmpeg as ef
 import legendas
@@ -185,6 +187,8 @@ def config_clip(meta: dict, clip: dict) -> dict:
         "zoom_forca": c.get("zoom_forca", d["zoom"]),
         "impacto": c.get("impacto", d["impacto"]),
         "broll": c.get("broll", bool(meta["opcoes"].get("broll"))),
+        "reacoes": c.get("reacoes", bool(meta["opcoes"].get("reacoes"))),
+        "idioma_legenda": c.get("idioma_legenda", meta["opcoes"].get("idioma_legenda") or ""),
         "formato": c.get("formato", plano["formato"]),
         "legenda_ativa": c.get("legenda_ativa", leg["ativa"]),
         "estilo": c.get("estilo", leg["estilo"]),
@@ -451,6 +455,9 @@ def renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progres
     p = _preparar_corte(meta, clip, cfg, palavras, pid, cid)
     trechos, abertura, duracao, pal_clip = p["trechos"], p["abertura"], p["duracao"], p["pal_clip"]
     zoom, zoom_base, titulo, efeitos = p["zoom"], p["zoom_base"], p["titulo"], p["efeitos"]
+    idioma = cfg["idioma_legenda"]
+    if idioma and idioma != transcricao.get("idioma"):  # legenda (e título) em outro idioma
+        pal_clip, titulo = traducao.traduzir_clipe(pid, pal_clip, titulo, idioma)
 
     # 3) Corte com o áudio final (normalização, música e efeitos)
     corte = tmp / f"{cid}_corte.mp4"
@@ -475,6 +482,7 @@ def renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progres
         look=direcao.filtro_look(cfg["look"]), zoom_intensidade=direcao.ZOOMS.get(cfg["zoom_forca"], 0.12),
         transicao=cfg["transicao"], cortes=p["cortes"], impacto=cfg["impacto"], impactos=p["impactos"],
         broll=_brolls(pid, clip, cfg, p["partes"]),
+        reacoes=_reacoes(clip, cfg, p["partes"], bool(titulo), largura),
     )
 
     info, usou_remotion = None, False
@@ -499,10 +507,11 @@ def renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progres
 
     thumb = pasta / "thumbs" / f"{cid}.jpg"
     ef.extrair_frame(saida, min(1.2, duracao / 2), thumb, largura=540)
+    capa = _capa(meta, clip, corte, saida_dir, cid)
 
     def f(m):
         c = projetos.clip(m, cid)
-        c.update(trechos=trechos, corte_assinatura=assinatura, arquivo=str(saida), thumb=str(thumb),
+        c.update(trechos=trechos, corte_assinatura=assinatura, arquivo=str(saida), thumb=str(thumb), capa=capa,
                  duracao=round(duracao, 2), versao=int(time.time()), status="pronto", erro=None,
                  layout_usado=info.get("layout") if info else None,
                  legenda_usada="animada" if usou_remotion else "simples")
@@ -531,6 +540,36 @@ def _brolls(pid: str, clip: dict, cfg: dict, partes: list) -> list[tuple[float, 
         if arquivo:
             saida.append((round(a, 3), round(f, 3), str(arquivo)))
     return saida
+
+
+def _reacoes(clip: dict, cfg: dict, partes: list, com_titulo: bool, largura: int) -> list:
+    """Textos de reação no tempo do clipe, já desenhados: [(início, figurinha BGRA)]."""
+    if not cfg["reacoes"]:
+        return []
+    saida = []
+    for k, r in enumerate(clip.get("reacoes") or []):
+        posicoes = ef.mapear_intervalo(r["t"], r["t"], partes)
+        if not posicoes:
+            continue
+        t = posicoes[-1][0]
+        if t < (4.2 if com_titulo else 1.0) or any(abs(t - x) < 2.0 for x, _ in saida):
+            continue  # o título ocupa os primeiros segundos; duas reações coladas cansam
+        saida.append((round(t, 3), enfeites.figurinha_reacao(r["texto"], largura, k)))
+    return saida
+
+
+def _capa(meta: dict, clip: dict, corte: Path, saida_dir: Path, cid: str) -> str | None:
+    """Capa 1080x1920 com o título, do melhor quadro do clipe (o corte ainda sem legenda nem efeitos)."""
+    try:
+        quadro, rosto = enfeites.melhor_quadro(str(corte), com_rosto=meta["modo"] == "falado")
+        if quadro is None:
+            return None
+        arq = saida_dir / f"{cid}_capa.jpg"
+        enfeites.capa_vertical(quadro, clip.get("titulo") or "", rosto).save(arq, quality=90)
+        return str(arq)
+    except Exception as e:  # capa é extra: nunca derruba o render
+        log.warning("Capa do %s falhou: %s", cid, e)
+        return None
 
 
 def texto_dos_posts(clips: list[dict]) -> str:
@@ -669,7 +708,8 @@ def _cortes_gameplay(video, transcricao, analise, plano, pid, excluir=None, quan
             cortes.append(Corte(inicio=inicio, fim=fim, titulo=e.titulo, nota=e.nota, pico=c["pico"],
                                 justificativa=e.justificativa, palavras_enfase=e.palavras_enfase, emojis=e.emojis,
                                 clima=e.clima, remover=remover, correcoes=e.correcoes,
-                                legenda_post=e.legenda_post, hashtags=e.hashtags, direcao=e.direcao))
+                                legenda_post=e.legenda_post, hashtags=e.hashtags, direcao=e.direcao,
+                                reacoes=e.reacoes))
         if cortes:
             cortes = cortes[:quantidade]
             if ver_imagens:
@@ -939,6 +979,7 @@ def _novo_clip(cid: str, corte: Corte) -> dict:
         "legenda_post": corte.legenda_post, "hashtags": list(corte.hashtags),
         "direcao": direcao.valida(corte.direcao, list(llm.presets_disponiveis())),
         "broll": [b.model_dump() for b in corte.broll],
+        "reacoes": [r.model_dump() for r in corte.reacoes],
         "config": {}, "palavras_editadas": {}, "status": "fila", "arquivo": None, "thumb": None,
         "duracao": round(corte.fim - corte.inicio, 2), "versao": 0,
     }
@@ -1054,7 +1095,7 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
 
 # Campos que definem o resultado de um clipe (decididos pelo Claude ou pelo plano local)
 CAMPOS_CLIP = ("inicio", "fim", "titulo", "remover", "correcoes", "gancho", "clima", "emojis", "palavras_enfase", "pico",
-               "direcao", "broll")
+               "direcao", "broll", "reacoes")
 
 
 def _reaproveitar(novo: dict, antigo: dict | None) -> bool:

@@ -57,7 +57,9 @@ export default function Home() {
   const [barra, setBarra] = useState(null); // null = padrão do estilo de legenda
   const [abertura, setAbertura] = useState(true);
   const [diretor, setDiretor] = useState(true); // o Claude varia o visual de cada clipe
-  const [broll, setBroll] = useState(true);       // vídeos de apoio do Pexels (só na fala)
+  const [broll, setBroll] = useState(true);       // vídeos de apoio do Pixabay/Pexels (só na fala)
+  const [reacoes, setReacoes] = useState(true);   // "ESPERA...", "KKKK" no pico
+  const [idiomaLegenda, setIdiomaLegenda] = useState(""); // "" = idioma da fala
   const [limparVoz, setLimparVoz] = useState(null); // null = automático (fala sim, gameplay não)
   const [templates, setTemplates] = useState({});
   const [template, setTemplate] = useState(null);
@@ -181,7 +183,7 @@ export default function Home() {
             estilo_legenda: animada ? "animada" : "simples", layout, cor, template,
             zoom, remover_silencios: silencios, titulo, barra, abertura, limpar_voz: limparVoz,
             musica: musica === "arquivo" ? musicaArquivo.trim() : musica, efeitos_sonoros: efeitos,
-            video_apoio: apoio || null, ver_imagens: verImagens, diretor, broll,
+            video_apoio: apoio || null, ver_imagens: verImagens, diretor, broll, reacoes, idioma_legenda: idiomaLegenda,
           },
         },
         setEnviando,
@@ -191,7 +193,7 @@ export default function Home() {
       avisar(e.message, "erro");
       setEnviando(null);
     }
-  }, [pronto, enviando, usarCaminho, arquivo, caminho, instrucao, modo, numClips, duracao, formato, preset, animada, layout, musica, musicaArquivo, efeitos, cor, template, zoom, silencios, titulo, barra, abertura, limparVoz, apoio, verImagens, diretor, broll, navegar, avisar]);
+  }, [pronto, enviando, usarCaminho, arquivo, caminho, instrucao, modo, numClips, duracao, formato, preset, animada, layout, musica, musicaArquivo, efeitos, cor, template, zoom, silencios, titulo, barra, abertura, limparVoz, apoio, verImagens, diretor, broll, reacoes, idiomaLegenda, navegar, avisar]);
 
   // Ctrl+Enter = gerar
   useEffect(() => {
@@ -455,6 +457,19 @@ export default function Home() {
               </select>
             </div>
             <div>
+              <label className="rotulo">Idioma da legenda</label>
+              <select value={idiomaLegenda} onChange={(e) => setIdiomaLegenda(e.target.value)} className="campo mt-2 cursor-pointer">
+                <option value="">Mesmo idioma do vídeo</option>
+                <option value="en">Inglês</option>
+                <option value="es">Espanhol</option>
+                <option value="pt">Português</option>
+                <option value="fr">Francês</option>
+                <option value="it">Italiano</option>
+                <option value="de">Alemão</option>
+              </select>
+              {idiomaLegenda && <p className="text-xs text-apagado mt-1">Legenda e título traduzidos pelo Claude (~US$ 0,002 por clipe); a fala continua no original.</p>}
+            </div>
+            <div>
               <label className="rotulo">Música de fundo</label>
               <select value={musica} onChange={(e) => setMusica(e.target.value)} className="campo mt-2 cursor-pointer">
                 <option value="">Sem música</option>
@@ -483,6 +498,7 @@ export default function Home() {
             {modo === "falado" && (
               <Alternador ativo={broll} aoMudar={setBroll} rotulo="B-roll (vídeos de apoio)" descricao="Quando a fala cita algo concreto (“comprei um carro”), cobre a tela por 2-3 s com um vídeo do Pixabay. Precisa da chave grátis em Configurações" />
             )}
+            <Alternador ativo={reacoes} aoMudar={setReacoes} rotulo="Textos de reação" descricao="“ESPERA...”, “KKKKK”, “QUE ISSO?!” pulando na tela no susto, na virada ou na risada" />
             <Alternador ativo={diretor} aoMudar={setDiretor} rotulo="Diretor de arte (IA)" descricao="O Claude escolhe legenda, cor, transições, zoom e efeitos de cada clipe pelo clima do trecho. Desligado: todos iguais ao estilo escolhido" />
             <Alternador ativo={abertura} aoMudar={setAbertura} rotulo="Abrir com o clímax" descricao="1-2 s do melhor momento antes do contexto (segura nos 3 primeiros segundos)" />
             <Alternador ativo={barra ?? !!estilos[preset]?.barra_progresso?.ativa} aoMudar={setBarra} rotulo="Barra de progresso" descricao="Enche no topo durante o clipe" />

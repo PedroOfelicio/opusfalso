@@ -60,6 +60,8 @@ export default function Longos() {
   const [verImagens, setVerImagens] = useState(true);
   const [cortarParado, setCortarParado] = useState(true);
   const [removerErros, setRemoverErros] = useState(true);
+  const [diretor, setDiretor] = useState(true);
+  const [broll, setBroll] = useState(true);
   const [ritmo, setRitmo] = useState("dinamico");
   const [limparVoz, setLimparVoz] = useState(null); // null = automático (fala sim, gameplay não)
   const [estilos, setEstilos] = useState({});
@@ -101,7 +103,7 @@ export default function Longos() {
           modo,
           opcoes: {
             modo_longo: modoLongo, alvo_min: alvo, abertura, zoom, legenda, preset, efeitos, musica,
-            ver_imagens: verImagens, cortar_parado: cortarParado, remover_erros: removerErros,
+            ver_imagens: verImagens, cortar_parado: cortarParado, remover_erros: removerErros, diretor, broll,
             ritmo, limpar_voz: limparVoz,
           },
         },
@@ -255,6 +257,10 @@ export default function Longos() {
           <Alternador ativo={limparVoz ?? modo === "falado"} aoMudar={setLimparVoz} rotulo="Melhorar a voz" descricao="Tira ruído de fundo e zumbido, dá presença (automático na fala)" />
           <Alternador ativo={abertura} aoMudar={setAbertura} rotulo="Abrir com o melhor momento" descricao="Teaser de alguns segundos antes de começar (segura quem chegou agora)" />
           <Alternador ativo={zoom} aoMudar={setZoom} rotulo="Zoom nos cortes" descricao="Punch-in alternado para esconder os cortes secos, com moderação" />
+          <Alternador ativo={diretor} aoMudar={setDiretor} rotulo="Cor pelo clima (IA)" descricao="O Claude escolhe o look de cor do vídeo pelo tom do conteúdo (cinema, quente, frio...)" />
+          {modo === "falado" && (
+            <Alternador ativo={broll} aoMudar={setBroll} rotulo="B-roll (vídeos de apoio)" descricao="Quando a fala cita algo concreto, cobre a tela por 2-4 s com um vídeo do Pixabay" />
+          )}
           {modo === "falado" ? (
             <Alternador ativo={removerErros} aoMudar={setRemoverErros} rotulo="Tirar erros de gravação" descricao="O Claude acha frases repetidas, começos em falso e desvios" />
           ) : (

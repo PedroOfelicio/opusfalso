@@ -471,7 +471,8 @@ def tamanho_saida(info: dict, altura_max: int = 1080) -> tuple[int, int]:
 
 def renderizar_bloco(video: str | Path, trechos: list[tuple[float, float]], saida: str | Path, info: dict,
                      zoom: list[tuple[float, float, float]] | None = None, arquivo_ass: str | None = None,
-                     flash: bool = False, altura_max: int = 1080, progresso=None, cancelado=None) -> float:
+                     flash: bool = False, altura_max: int = 1080, look: str | None = None,
+                     brolls: list | None = None, progresso=None, cancelado=None) -> float:
     """Renderiza um bloco de vídeo longo: `trechos` (em ordem) de um pedaço contínuo do original, com
     jump cuts na grade de quadros, zoom fixo por intervalo (tempo do bloco), legenda .ass (caminho relativo
     a DADOS) e flash branco no começo (transição). Sai em .mkv com áudio PCM, para juntar os blocos sem
@@ -494,10 +495,21 @@ def renderizar_bloco(video: str | Path, trechos: list[tuple[float, float]], said
         cadeia.append(f"zoompan=z='1+{z}':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={largura}x{altura}:fps={FPS_SAIDA}")
     if flash:
         cadeia.append("drawbox=c=white@0.75:t=fill:enable='lt(t,0.07)',drawbox=c=white@0.35:t=fill:enable='between(t,0.07,0.16)'")
-    if arquivo_ass:
-        cadeia.append(f"ass={arquivo_ass}:fontsdir=fontes")
-    cadeia.append("format=yuv420p")
-    filtros = [f"[0:v]{','.join(cadeia)}[v]"]
+    if look:
+        cadeia.append(look)  # cor do vídeo (antes da legenda, que não muda de cor)
+    filtros = [f"[0:v]{','.join(cadeia)}[vb0]"]
+    atual = "vb0"
+    entradas_extra = []
+    for k, (a, b, arquivo) in enumerate(brolls or []):
+        # Vídeo de apoio cobrindo a tela de a até b (tempo do bloco), com 0,2 s de fusão na entrada e na saída
+        entradas_extra += ["-stream_loop", "-1", "-t", f"{b - a + 0.5:.3f}", "-i", str(arquivo)]
+        filtros.append(f"[{k + 1}:v]scale={largura}:{altura}:force_original_aspect_ratio=increase,"
+                       f"crop={largura}:{altura},fps={FPS_SAIDA},setpts=PTS-STARTPTS+{a:.3f}/TB,format=yuva420p,"
+                       f"fade=t=in:st={a:.3f}:d=0.2:alpha=1,fade=t=out:st={max(a, b - 0.2):.3f}:d=0.2:alpha=1[br{k}]")
+        filtros.append(f"[{atual}][br{k}]overlay=enable='between(t,{a:.3f},{b:.3f})':eof_action=pass[vb{k + 1}]")
+        atual = f"vb{k + 1}"
+    final = [f"ass={arquivo_ass}:fontsdir=fontes"] if arquivo_ass else []
+    filtros.append(f"[{atual}]{','.join(final + ['format=yuv420p'])}[v]")
     if info["tem_audio"]:
         # Pacotes de áudio de exatamente 1 quadro (1600 amostras a 48 kHz): o mesmo `select` corta
         # vídeo e áudio nos mesmos pontos
@@ -509,7 +521,7 @@ def renderizar_bloco(video: str | Path, trechos: list[tuple[float, float]], said
     saida.parent.mkdir(parents=True, exist_ok=True)
     roteiro = saida.with_suffix(".filtro.txt")
     roteiro.write_text(";".join(filtros), encoding="utf-8")
-    args = ["-ss", f"{base:.4f}", "-t", f"{total + 0.2:.4f}", "-i", str(video),
+    args = ["-ss", f"{base:.4f}", "-t", f"{total + 0.2:.4f}", "-i", str(video), *entradas_extra,
             "-/filter_complex", str(roteiro), "-map", "[v]", "-map", "[a]",
             *encoder_video(), "-c:a", "pcm_s16le", "-ar", "48000", "-t", f"{duracao:.4f}", str(saida)]
     rodar(args, duracao=duracao, progresso=progresso, cancelado=cancelado, cwd=str(config.DADOS) if arquivo_ass else None)
