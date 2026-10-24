@@ -21,7 +21,13 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 BACKEND = RAIZ / "backend"
-DADOS = Path(os.environ.get("OPUSFALSO_DADOS", r"C:\opusfalso-dados"))
+# Instalado pelo instalador: <pasta>/app (codigo), <pasta>/venv e <pasta>/dados. Desenvolvimento: C:/opusfalso-dados
+if os.environ.get("OPUSFALSO_DADOS"):
+    DADOS = Path(os.environ["OPUSFALSO_DADOS"])
+elif (RAIZ / "versao.txt").exists():
+    DADOS = RAIZ.parent / "dados"
+else:
+    DADOS = Path(r"C:\opusfalso-dados")
 PORTA = int(os.environ.get("CLIPADOR_PORTA", "8000"))
 URL = f"http://127.0.0.1:{PORTA}"
 PORTA_TRAVA = PORTA + 765  # só uma instância do lançador por vez
@@ -53,7 +59,7 @@ def ligar_servidor() -> None:
     servidor = subprocess.Popen(
         [str(python), "-m", "uvicorn", "api:app", "--host", "127.0.0.1", "--port", str(PORTA), "--no-access-log"],
         cwd=str(BACKEND), stdout=open(DADOS / "api.log", "ab"), stderr=open(DADOS / "api_err.log", "ab"),
-        creationflags=SEM_JANELA)
+        env={**os.environ, "OPUSFALSO_DADOS": str(DADOS)}, creationflags=SEM_JANELA)
 
 
 def esperar_servidor(limite: float = 90) -> bool:

@@ -7,6 +7,7 @@
 param(
     [switch]$Atualizar,
     [switch]$NaoAbrir,
+    [string]$NomeAtalho = "Clipador",
     [string]$Destino = (Join-Path $env:LOCALAPPDATA "Clipador"),
     [string]$Repo = "PedroOfelicio/opusfalso",
     [string]$Ramo = "main"
@@ -126,12 +127,9 @@ Ok "Interface ok"
 
 # ------------------------------------------------------------------ pastas, atalho e abertura
 Passo "Criando o atalho"
-[Environment]::SetEnvironmentVariable("OPUSFALSO_DADOS", $dados, "User")
-[Environment]::SetEnvironmentVariable("OPUSFALSO_VENV", $venv, "User")
-$env:OPUSFALSO_DADOS = $dados
-$env:OPUSFALSO_VENV = $venv
+# Sem variaveis de ambiente: o app acha a pasta de dados ao lado dele (<Destino>\dados)
 New-Item -ItemType Directory -Force $dados | Out-Null
-& (Join-Path $app "app\criar_atalho.ps1") | Out-Host
+& (Join-Path $app "app\criar_atalho.ps1") -Venv $venv -Nome $NomeAtalho | Out-Host
 
 Write-Host "`nPronto! O Clipador esta instalado." -ForegroundColor Green
 Write-Host "Abra pelo atalho 'Clipador' na area de trabalho. Na primeira vez ele pede a sua chave do Claude."
