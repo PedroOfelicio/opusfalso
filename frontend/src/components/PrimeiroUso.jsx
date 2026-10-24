@@ -1,7 +1,7 @@
 // Tela de primeiro uso: aparece enquanto não houver chave do Claude. Explica como criar a chave, testa e salva;
 // pede a chave (opcional) do Pixabay para o B-roll e mostra se o PC tem GPU NVIDIA.
 import { useEffect, useState } from "react";
-import { Check, Cpu, ExternalLink, KeyRound, Sparkles, X } from "lucide-react";
+import { Check, Cpu, ExternalLink, KeyRound, X } from "lucide-react";
 import { api } from "../api";
 import { Botao } from "./ui";
 
@@ -55,7 +55,7 @@ export default function PrimeiroUso() {
       <div className="cartao w-full max-w-xl p-7 shadow-suave animate-surgir max-h-[92vh] overflow-y-auto">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="size-11 rounded-xl gradiente flex items-center justify-center"><Sparkles className="size-5 text-white" /></div>
+            <img src="/icone-192.png" alt="" className="size-12 rounded-xl" />
             <div>
               <h2 className="text-xl font-semibold">Bem-vindo ao Gadosso Edit</h2>
               <p className="text-sm text-suave">Falta só uma coisa para começar: a sua chave do Claude.</p>

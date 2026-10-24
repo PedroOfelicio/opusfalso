@@ -42,8 +42,7 @@ export default function Cabecalho() {
     <header className="sticky top-0 z-40 border-b border-black/[0.06] bg-fundo/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 w-full max-w-[1600px] items-center gap-2 px-4 md:gap-8 md:px-6">
         <NavLink to="/" aria-label="Gadosso Edit: início" className="flex shrink-0 items-center gap-2.5">
-          <img src="/logo-gadosso.png" alt="gadosso" width={1200} height={297} className="h-[19px] w-auto select-none md:h-6" draggable={false} />
-          <span className="rotulo-mono rounded-full border border-black/15 px-2 py-0.5 text-black/60">edit</span>
+          <img src="/logo-gadosso-edit.png" alt="gadosso edit" width={1642} height={260} className="h-[22px] w-auto select-none md:h-7" draggable={false} />
         </NavLink>
 
         <nav aria-label="Seções" className="-mx-1 flex min-w-0 flex-1 gap-0.5 overflow-x-auto px-1 md:gap-1">
