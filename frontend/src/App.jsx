@@ -9,7 +9,8 @@ import Estilos from "./pages/Estilos";
 import Configuracoes from "./pages/Configuracoes";
 import Longos from "./pages/Longos";
 import ProjetoLongo from "./pages/ProjetoLongo";
-import { Compass } from "lucide-react";
+import { Compass, Sparkles } from "lucide-react";
+import { MODO_DEMO } from "./api";
 
 export default function App() {
   return (
@@ -17,6 +18,14 @@ export default function App() {
       <div className="flex h-full">
         <Sidebar />
         <main className="flex-1 min-w-0 overflow-y-auto">
+          {MODO_DEMO && (
+            <div className="sticky top-0 z-40 flex items-center justify-center gap-2 px-4 py-2 text-xs sm:text-sm bg-roxo/15 border-b border-roxo/30 backdrop-blur">
+              <Sparkles className="size-4 text-roxo shrink-0" />
+              <span>
+                <strong>Demonstração</strong> com projetos reais já processados pelo Clipador. A edição roda no PC (GPU, FFmpeg e Claude); aqui você navega pelos resultados.
+              </span>
+            </div>
+          )}
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/longos" element={<Longos />} />

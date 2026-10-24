@@ -76,9 +76,21 @@ def ler_audio(caminho: str | Path, taxa: int = 16000, inicio: float | None = Non
     return np.frombuffer(saida.stdout, dtype=np.float32).copy()
 
 
+def encoder_video(leve: bool = False) -> tuple[str, ...]:
+    """Usa NVENC (GPU NVIDIA) se funcionar; senão libx264. leve=True (clipe final para as redes):
+    qualidade um pouco menor e teto de 8 Mbps; um clipe de 34 s cai de ~50 MB para ~20-30 MB."""
+    base = _encoder_base()
+    if not leve:
+        return base
+    if base[1] == "h264_nvenc":
+        return ("-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "23", "-b:v", "6M", "-maxrate", "8M",
+                "-bufsize", "16M", "-pix_fmt", "yuv420p")
+    return ("-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-maxrate", "8M", "-bufsize", "16M",
+            "-pix_fmt", "yuv420p")
+
+
 @functools.lru_cache(maxsize=1)
-def encoder_video() -> tuple[str, ...]:
-    """Usa NVENC (GPU NVIDIA) se funcionar; senão libx264."""
+def _encoder_base() -> tuple[str, ...]:
     teste = subprocess.run(
         ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=s=256x256:d=0.2", "-c:v", "h264_nvenc", "-f", "null", "-"],
         capture_output=True, creationflags=_SEM_JANELA,

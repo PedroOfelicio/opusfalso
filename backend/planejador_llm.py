@@ -23,6 +23,7 @@ from pydantic import BaseModel, ValidationError
 
 import config
 import custos
+import direcao
 from modelos import (CLIMAS, AjusteClips, Correcoes, Corte, EdicaoLonga, PlanoEdicao, TitulosCapitulos,
                      RespostaCortes, RespostaGameplay, RevisaoClipe)
 
@@ -182,7 +183,7 @@ SISTEMA_PLANO = """Você converte pedidos de edição de vídeo em um PLANO DE E
 Responda APENAS com um objeto JSON válido, sem markdown e sem comentários.
 
 Lista FECHADA de campos (não invente outros):
-- num_clips: inteiro 1-20 (quantos clipes gerar)
+- num_clips: inteiro 1-100 (quantos clipes gerar)
 - duracao_min, duracao_max: segundos (5-180)
 - formato: "9:16" | "16:9" | "1:1"  (vertical = 9:16, horizontal = 16:9, quadrado = 1:1)
 - legenda: {{"ativa": bool, "estilo": "simples"|"animada", "preset": um de {presets}, "cor": "#RRGGBB" ou null (cor da palavra falada; null = cor do preset)}}
@@ -236,7 +237,8 @@ Responda APENAS com JSON válido, sem markdown, no formato:
 {"cortes": [{"inicio": 12.3, "fim": 47.8, "titulo": "...", "nota": 87, "justificativa": "...",
              "palavras_enfase": ["..."], "emojis": [{"palavra": "...", "emoji": "🔥"}], "clima": "calma",
              "remover": [[20.1, 23.4]], "correcoes": [{"de": "palavra errada", "para": "palavra certa"}],
-             "gancho": [31.2, 34.0], "legenda_post": "...", "hashtags": ["#..."]}]}
+             "gancho": [31.2, 34.0], "legenda_post": "...", "hashtags": ["#..."],
+             "direcao": {"preset": "...", "cor": null, "look": "...", "transicao": "...", "zoom": "medio", "impacto": "nenhum"}}]}
 
 Critérios:
 - Cada clipe deve fazer sentido SOZINHO: começa numa frase que prende atenção (gancho) e termina num pensamento completo.
@@ -263,6 +265,11 @@ Critérios:
 - Ordene do melhor para o pior."""
 
 
+def _com_direcao(sistema: str) -> str:
+    """Acrescenta o catálogo da direção de arte (os presets vêm do estilos.json, que o usuário pode editar)."""
+    return sistema + "\n" + direcao.texto_catalogo(list(presets_disponiveis()))
+
+
 def _formatar_transcricao(transcricao: dict) -> str:
     return "\n".join(f"[{s['inicio']:.1f}-{s['fim']:.1f}] {s['texto']}" for s in transcricao["segmentos"])
 
@@ -279,7 +286,7 @@ def escolher_cortes_falado(transcricao: dict, plano: PlanoEdicao, projeto_id=Non
         pedido += ("NÃO use estes intervalos (já viraram clipes): "
                    + ", ".join(f"{a:.0f}-{b:.0f}s" for a, b in excluir) + "\n")
     conteudo = pedido + "\nTRANSCRIÇÃO:\n" + _formatar_transcricao(transcricao)
-    resposta = _chamar_json(SISTEMA_CORTES, conteudo, RespostaCortes, projeto_id, "escolha de cortes")
+    resposta = _chamar_json(_com_direcao(SISTEMA_CORTES), conteudo, RespostaCortes, projeto_id, "escolha de cortes")
 
     cortes = []
     for c in resposta.cortes:
@@ -348,7 +355,8 @@ Escolha os melhores e responda APENAS com JSON válido, sem markdown:
 {"escolhas": [{"id": 3, "inicio": 101.5, "fim": 128.0, "titulo": "...", "nota": 82, "justificativa": "...",
                "palavras_enfase": ["..."], "emojis": [{"palavra": "...", "emoji": "💀"}], "clima": "energetica",
                "remover": [[110.0, 114.5]], "correcoes": [{"de": "meu jeep", "para": "meu Deus"}],
-               "legenda_post": "...", "hashtags": ["#..."]}]}
+               "legenda_post": "...", "hashtags": ["#..."],
+               "direcao": {"preset": "...", "cor": null, "look": "...", "transicao": "...", "zoom": "forte", "impacto": "tremor"}}]}
 - Use os quadros para ver o que acontece de verdade. DESCARTE (não inclua) candidatos sem ação real:
   menu, loja/fase de compra, loading, mapa, tela parada, espectador, jogador só andando.
 - inicio/fim: segundos do vídeo, dentro da janela do candidato, respeitando a duração pedida.
@@ -387,7 +395,8 @@ def escolher_cortes_gameplay(candidatos: list[dict], quantidade: int, projeto_id
         if c.get("folha"):
             conteudo.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                                          "data": base64.standard_b64encode(c["folha"]).decode()}})
-    return _chamar_json(SISTEMA_GAMEPLAY, conteudo, RespostaGameplay, projeto_id, "escolha gameplay", max_tokens=4000)
+    return _chamar_json(_com_direcao(SISTEMA_GAMEPLAY), conteudo, RespostaGameplay, projeto_id, "escolha gameplay",
+                        max_tokens=5000)
 
 
 SISTEMA_REVISAO = """Você classifica quadros de um trecho de gameplay para a edição de um clipe curto.

@@ -9,6 +9,7 @@ e um aviso é registrado no projeto.
 """
 import json
 import logging
+import math
 import os
 import random
 import re
@@ -20,6 +21,7 @@ import armazenamento
 import biblioteca_audio as biblioteca
 import config
 import custos
+import direcao
 import editor_ffmpeg as ef
 import legendas
 import planejador_llm as llm
@@ -27,6 +29,7 @@ import planejador_local as local
 import projetos
 import reenquadramento as rq
 import transcricao as tr
+import youtube
 from config import Cancelado
 from modelos import CLIMAS, Corte, PlanoEdicao
 
@@ -103,6 +106,24 @@ def _claude_falhou(pid: str, erro: Exception):
     _aviso(pid, f"Claude indisponível: {str(erro).rstrip('.')}. Usando o planejador local (mais simples).")
 
 
+def baixar_se_link(pid: str, meta: dict, prog, cancelado) -> bool:
+    """Projeto de link (YouTube) com o vídeo ainda não baixado, ou já apagado: baixa agora, como primeira
+    parte da etapa de transcrição. Devolve True se baixou."""
+    if Path(meta["video"]).exists():
+        return False
+    if not meta.get("origem_url"):
+        raise FileNotFoundError(f"Vídeo não encontrado: {meta['video']}")
+    prog.etapa("transcrevendo")
+    prog(0.0, "Baixando o vídeo do link")
+    youtube.garantir_video(pid, lambda p, d="": prog(0.35 * p, d), cancelado)
+    return True
+
+
+def progresso_apos_download(prog, baixou: bool):
+    """Depois de baixar, a transcrição ocupa o resto da etapa (35% -> 100%)."""
+    return (lambda p, d="": prog(0.35 + 0.65 * p, d)) if baixou else prog
+
+
 def aviso_disco(pid: str):
     livre = armazenamento.livre()
     if livre < armazenamento.ALERTA_LIVRE:
@@ -148,12 +169,25 @@ def plano_base(opcoes: dict) -> PlanoEdicao:
 def config_clip(meta: dict, clip: dict) -> dict:
     plano, c = meta["plano"], clip.get("config", {})
     leg = plano["legenda"]
+    # Diretor de arte ligado: o visual vem da escolha do Claude para o clipe (completada pelo clima);
+    # desligado: tudo igual ao plano/template. O que o usuário mudar no editor (c) sempre vence.
+    if meta["opcoes"].get("diretor"):
+        d = direcao.efetiva(clip.get("direcao"), clip.get("clima"))
+        preset_auto = d["preset"] or leg["preset"]
+        cor_auto = leg["cor"] or d.get("cor")  # cor pedida na instrução vence a do diretor
+    else:
+        d = direcao.efetiva({}, None)
+        preset_auto, cor_auto = leg["preset"], leg["cor"]
     return {
+        "look": c.get("look", d["look"]),
+        "transicao": c.get("transicao", d["transicao"]),
+        "zoom_forca": c.get("zoom_forca", d["zoom"]),
+        "impacto": c.get("impacto", d["impacto"]),
         "formato": c.get("formato", plano["formato"]),
         "legenda_ativa": c.get("legenda_ativa", leg["ativa"]),
         "estilo": c.get("estilo", leg["estilo"]),
-        "preset": c.get("preset", leg["preset"]),
-        "cor": c.get("cor", leg["cor"]),
+        "preset": c.get("preset", preset_auto),
+        "cor": c.get("cor", cor_auto),
         "titulo_ativo": c.get("titulo_ativo", plano["titulo_gancho"]),
         "barra": c.get("barra", plano.get("barra_progresso")),
         "zoom": c.get("zoom", plano["zoom_em_enfase"]),
@@ -385,7 +419,8 @@ def _preparar_corte(meta: dict, clip: dict, cfg: dict, palavras: list[dict], pid
 
     assinatura = repr((partes, cfg["normalizar"], cfg["musica"], efeitos, cfg["limpar_voz"]))
     return {"trechos": trechos, "abertura": abertura, "partes": partes, "duracao": duracao, "pal_clip": pal_clip,
-            "zoom": zoom, "zoom_base": zoom_base, "titulo": titulo, "efeitos": efeitos, "assinatura": assinatura}
+            "zoom": zoom, "zoom_base": zoom_base, "titulo": titulo, "efeitos": efeitos, "assinatura": assinatura,
+            "cortes": direcao.cortes_grandes(partes, bool(abertura)), "impactos": picos if meta["modo"] == "gameplay" else []}
 
 
 def renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progresso=None, cancelado=None) -> dict:
@@ -435,6 +470,8 @@ def renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progres
         formato=cfg["formato"], layout=cfg["layout"], modo=meta["modo"], deslocamento_x=cfg["deslocamento_x"],
         zoom_momentos=zoom, zoom_base=zoom_base, video_apoio=cfg["video_apoio"],
         barra_progresso={"cor": est["cor_destaque"], "altura": barra.get("altura", 10)} if barra.get("ativa") else None,
+        look=direcao.filtro_look(cfg["look"]), zoom_intensidade=direcao.ZOOMS.get(cfg["zoom_forca"], 0.12),
+        transicao=cfg["transicao"], cortes=p["cortes"], impacto=cfg["impacto"], impactos=p["impactos"],
     )
 
     info, usou_remotion = None, False
@@ -518,9 +555,39 @@ def _plano(meta: dict, pid: str) -> PlanoEdicao:
     return plano
 
 
-def _cortes_falado(transcricao, plano, pid, excluir=None, quantidade=None) -> list[Corte]:
+MUITOS_CLIPES = 8     # acima disso, a escolha é feita por janelas do vídeo
+POR_JANELA = 6        # clipes pedidos em cada janela
+
+
+def janelas(duracao: float, quantidade: int, por_janela: int = POR_JANELA) -> list[tuple[float, float, int]]:
+    """Divide o vídeo em janelas iguais para pedir muitos clipes (ex.: live de 2 h, 70 clipes = 12 janelas de
+    10 min, ~6 clipes cada). Cada pedido ao Claude fica pequeno e os clipes saem espalhados pela live inteira."""
+    n = max(1, math.ceil(quantidade / por_janela))
+    passo = duracao / n
+    base, resto = divmod(quantidade, n)
+    return [(round(k * passo, 2), round((k + 1) * passo, 2), base + (1 if k < resto else 0)) for k in range(n)]
+
+
+def _cortes_falado(transcricao, plano, pid, excluir=None, quantidade=None, progresso=None) -> list[Corte]:
     if not transcricao["palavras"]:
         raise ValueError("Nenhuma fala encontrada no vídeo. Para gameplay sem voz use o modo Gameplay.")
+    quantidade = quantidade or plano.num_clips
+    if quantidade > MUITOS_CLIPES:
+        cortes: list[Corte] = []
+        partes = janelas(transcricao["duracao"], quantidade)
+        for k, (a, b, q) in enumerate(partes):
+            if progresso:
+                progresso(k / len(partes), f"Parte {k + 1} de {len(partes)} do vídeo")
+            # a janela vai até um clipe depois do fim, para o último clipe poder terminar a ideia
+            limite = b + plano.duracao_max
+            parcial = {**transcricao,
+                       "segmentos": [s for s in transcricao["segmentos"] if s["inicio"] >= a and s["fim"] <= limite],
+                       "palavras": [w for w in transcricao["palavras"] if a <= w["i"] <= limite]}
+            if len(parcial["palavras"]) < 20:
+                continue
+            ocupados = list(excluir or []) + [(c.inicio, c.fim) for c in cortes]
+            cortes += _cortes_falado(parcial, plano, pid, ocupados, q)
+        return cortes
     try:
         return llm.escolher_cortes_falado(transcricao, plano, pid, excluir, quantidade)
     except llm.ErroClaude as e:
@@ -529,8 +596,25 @@ def _cortes_falado(transcricao, plano, pid, excluir=None, quantidade=None) -> li
 
 
 def _cortes_gameplay(video, transcricao, analise, plano, pid, excluir=None, quantidade=None,
-                     ver_imagens=True, cancelado=None, max_candidatos: int | None = None) -> list[Corte]:
+                     ver_imagens=True, cancelado=None, max_candidatos: int | None = None,
+                     progresso=None, em_janela: bool = False) -> list[Corte]:
     quantidade = quantidade or plano.num_clips
+    if quantidade > MUITOS_CLIPES and not em_janela:
+        cortes: list[Corte] = []
+        total = analise["duracao"]
+        partes = janelas(total, quantidade)
+        for k, (a, b, q) in enumerate(partes):
+            if cancelado is not None and cancelado.is_set():
+                raise Cancelado()
+            if progresso:
+                progresso(k / len(partes), f"Parte {k + 1} de {len(partes)} do vídeo")
+            fora = [(0.0, a), (b, total)] + list(excluir or []) + [(c.inicio, c.fim) for c in cortes]
+            try:
+                cortes += _cortes_gameplay(video, transcricao, analise, plano, pid, fora, q, ver_imagens, cancelado,
+                                           max_candidatos=q * 2, em_janela=True)
+            except ValueError:  # parte sem nenhum pico de energia (ex.: pausa da live)
+                continue
+        return cortes
     tem_fala = len(transcricao["palavras"]) >= 20
     # Janela maior que o clipe final: o Claude apara início/fim olhando os quadros
     janela = min(plano.duracao_max + 8, 100)
@@ -560,7 +644,7 @@ def _cortes_gameplay(video, transcricao, analise, plano, pid, excluir=None, quan
             cortes.append(Corte(inicio=inicio, fim=fim, titulo=e.titulo, nota=e.nota, pico=c["pico"],
                                 justificativa=e.justificativa, palavras_enfase=e.palavras_enfase, emojis=e.emojis,
                                 clima=e.clima, remover=remover, correcoes=e.correcoes,
-                                legenda_post=e.legenda_post, hashtags=e.hashtags))
+                                legenda_post=e.legenda_post, hashtags=e.hashtags, direcao=e.direcao))
         if cortes:
             cortes = cortes[:quantidade]
             if ver_imagens:
@@ -573,6 +657,8 @@ def _cortes_gameplay(video, transcricao, analise, plano, pid, excluir=None, quan
                 cortes = revisados
             return cortes
         # O Claude respondeu, mas descartou todos os candidatos (ex.: só menu, tela parada, vídeo que não é jogo)
+        if em_janela:
+            return []  # muitos clipes: uma parte fraca da live simplesmente não dá clipe
         recusados = True
         _aviso(pid, "O Claude não achou nenhum momento com ação real" + (" nas imagens" if ver_imagens else "")
                + ": os clipes foram escolhidos só pelos picos de áudio e estão com nota baixa.")
@@ -826,6 +912,7 @@ def _novo_clip(cid: str, corte: Corte) -> dict:
         "emojis": [e.model_dump() for e in corte.emojis], "pico": corte.pico, "clima": corte.clima,
         "remover": corte.remover, "correcoes": [c.model_dump() for c in corte.correcoes], "gancho": corte.gancho,
         "legenda_post": corte.legenda_post, "hashtags": list(corte.hashtags),
+        "direcao": direcao.valida(corte.direcao, list(llm.presets_disponiveis())),
         "config": {}, "palavras_editadas": {}, "status": "fila", "arquivo": None, "thumb": None,
         "duracao": round(corte.fim - corte.inicio, 2), "versao": 0,
     }
@@ -837,8 +924,6 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
     meta = projetos.ler(pid)
     prog = Progresso(pid, imprimir)
     video = meta["video"]
-    if not Path(video).exists():
-        raise FileNotFoundError(f"Vídeo não encontrado: {video}")
 
     # Continuando depois de um erro/cancelamento: os clipes da rodada anterior que saírem iguais
     # (as respostas do Claude vêm do cache do projeto) não são cortados nem renderizados de novo
@@ -849,6 +934,7 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
         m.update(status="processando", iniciado_em=time.time(), erro=None, progresso=0.0, etapas={}, avisos=[])
     projetos.atualizar(pid, inicio)
     aviso_disco(pid)
+    baixou = baixar_se_link(pid, meta, prog, cancelado)
 
     info = ef.sondar(video)
     if not (config.PASTA_PROJETOS / pid / "thumb.jpg").exists():
@@ -864,8 +950,9 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
         projetos.atualizar(pid, lambda m: m.update(clips=[]))
 
     # 1. Transcrição (também no gameplay: captura os comentários do jogador)
-    prog.etapa("transcrevendo")
-    transcricao = tr.transcrever(video, prog, cancelado)
+    if not baixou:
+        prog.etapa("transcrevendo")
+    transcricao = tr.transcrever(video, progresso_apos_download(prog, baixou), cancelado)
 
     # 2. Plano + análise de áudio
     prog.etapa("analisando")
@@ -882,9 +969,10 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
     prog.etapa("escolhendo")
     if meta["modo"] == "gameplay":
         cortes = _cortes_gameplay(video, transcricao, analise, plano, pid,
-                                  ver_imagens=meta["opcoes"].get("ver_imagens", True), cancelado=cancelado)
+                                  ver_imagens=meta["opcoes"].get("ver_imagens", True), cancelado=cancelado,
+                                  progresso=prog)
     else:
-        cortes = _cortes_falado(transcricao, plano, pid)
+        cortes = _cortes_falado(transcricao, plano, pid, progresso=prog)
     if not cortes:
         llm.esquecer_respostas(pid)  # tentar de novo deve perguntar de novo, não repetir a mesma resposta
         raise ValueError("Nenhum trecho adequado foi encontrado.")
@@ -907,15 +995,31 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
     # 4 e 5. Corte e render de cada clipe
     n = len(clips)
     prog.etapa("cortando")
-    for k, c in enumerate(clips):
-        if cancelado is not None and cancelado.is_set():
-            raise Cancelado()
-        if c["status"] != "pronto":
-            _cortar_so(pid, c["id"], transcricao, lambda p, k=k: prog((k + p) / n, f"Clipe {k + 1} de {n}"), cancelado)
-    prog.etapa("legendando")
-    for k, c in enumerate(clips):
-        if c["status"] != "pronto":
-            renderizar_clip(pid, c["id"], transcricao, lambda p, k=k: prog((k + p) / n, f"Clipe {k + 1} de {n}"), cancelado)
+    if n > MUITOS_CLIPES:
+        # Muitos clipes: corta e renderiza um de cada vez e apaga os intermediários logo em seguida
+        # (70 cortes intermediários juntos ocupariam ~4 GB). Os primeiros clipes já ficam prontos para ver.
+        prog.etapa("legendando")
+        for k, c in enumerate(clips):
+            if cancelado is not None and cancelado.is_set():
+                raise Cancelado()
+            if c["status"] == "pronto":
+                continue
+            _cortar_so(pid, c["id"], transcricao, lambda p, k=k: prog((k + 0.3 * p) / n, f"Clipe {k + 1} de {n}"),
+                       cancelado)
+            renderizar_clip(pid, c["id"], transcricao,
+                            lambda p, k=k: prog((k + 0.3 + 0.7 * p) / n, f"Clipe {k + 1} de {n}"), cancelado)
+            for intermediario in (projetos.pasta(pid) / "tmp").glob(f"{c['id']}_*.mp4"):
+                intermediario.unlink(missing_ok=True)
+    else:
+        for k, c in enumerate(clips):
+            if cancelado is not None and cancelado.is_set():
+                raise Cancelado()
+            if c["status"] != "pronto":
+                _cortar_so(pid, c["id"], transcricao, lambda p, k=k: prog((k + p) / n, f"Clipe {k + 1} de {n}"), cancelado)
+        prog.etapa("legendando")
+        for k, c in enumerate(clips):
+            if c["status"] != "pronto":
+                renderizar_clip(pid, c["id"], transcricao, lambda p, k=k: prog((k + p) / n, f"Clipe {k + 1} de {n}"), cancelado)
 
     prog.finalizar()
     custo = sum(h["custo"] for h in custos.resumo()["historico"] if h.get("projeto") == pid)
@@ -923,7 +1027,8 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
 
 
 # Campos que definem o resultado de um clipe (decididos pelo Claude ou pelo plano local)
-CAMPOS_CLIP = ("inicio", "fim", "titulo", "remover", "correcoes", "gancho", "clima", "emojis", "palavras_enfase", "pico")
+CAMPOS_CLIP = ("inicio", "fim", "titulo", "remover", "correcoes", "gancho", "clima", "emojis", "palavras_enfase", "pico",
+               "direcao")
 
 
 def _reaproveitar(novo: dict, antigo: dict | None) -> bool:

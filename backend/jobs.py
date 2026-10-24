@@ -22,6 +22,10 @@ class FilaJobs:
         self._cancelar: dict[str, threading.Event] = {}
         self._thread = None
         self.atual: dict | None = None
+        # Ganchos opcionais por projeto: antes(pid, cancelado, tipo) roda antes de cada job (ex.: baixar de novo o
+        # vídeo de um link) e depois(pid, pendentes) depois (ex.: apagar o vídeo quando não sobra trabalho)
+        self.antes = None
+        self.depois = None
 
     def iniciar(self):
         if self._thread is None:
@@ -43,6 +47,10 @@ class FilaJobs:
     def pendentes(self) -> int:
         return self._fila.qsize()
 
+    def pendentes_do(self, pid: str) -> int:
+        with self._fila.mutex:
+            return sum(1 for j in self._fila.queue if j["pid"] == pid)
+
     def _loop(self):
         while True:
             job = self._fila.get()
@@ -54,6 +62,8 @@ class FilaJobs:
             self.atual = job
             log.info("Iniciando job %s %s %s", tipo, pid, cid or "")
             try:
+                if self.antes:
+                    self.antes(pid, evento, tipo)
                 job["funcao"](evento)
                 log.info("Job concluído: %s %s", tipo, pid)
             except Cancelado:
@@ -65,6 +75,11 @@ class FilaJobs:
             finally:
                 self.atual = None
                 evento.clear()
+                if self.depois:
+                    try:
+                        self.depois(pid, self.pendentes_do(pid))
+                    except Exception as e:  # limpeza nunca derruba a fila
+                        log.warning("Pós-job falhou para %s: %s", pid, e)
 
     @staticmethod
     def _marcar_cancelado(pid, cid, tipo):

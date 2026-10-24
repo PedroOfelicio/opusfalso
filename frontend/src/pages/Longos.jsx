@@ -131,7 +131,7 @@ export default function Longos() {
           <div className="rotulo">Vídeo</div>
           <button onClick={() => setUsarArquivo(!usarArquivo)} className="text-xs text-suave hover:text-texto inline-flex items-center gap-1.5 cursor-pointer">
             {usarArquivo ? <FolderInput className="size-3.5" /> : <Upload className="size-3.5" />}
-            {usarArquivo ? "Usar um caminho local" : "Enviar arquivo em vez disso"}
+            {usarArquivo ? "Usar um link ou caminho local" : "Enviar arquivo em vez disso"}
           </button>
         </div>
         {usarArquivo ? (
@@ -163,8 +163,12 @@ export default function Longos() {
           )
         ) : (
           <>
-            <input value={caminho} onChange={(e) => setCaminho(e.target.value)} placeholder="C:\Users\voce\Videos\live_de_ontem.mp4" className="campo font-mono text-[13px]" />
-            <p className="text-xs text-apagado mt-2">Recomendado para vídeos longos: o arquivo não é enviado nem copiado, é lido direto de onde está.</p>
+            <input value={caminho} onChange={(e) => setCaminho(e.target.value)} placeholder="https://youtube.com/watch?v=...  ou  C:\Users\voce\Videos\live_de_ontem.mp4" className="campo font-mono text-[13px]" />
+            <p className="text-xs text-apagado mt-2">
+              {/^\s*https?:\/\//.test(caminho)
+                ? "Link: o vídeo é baixado (até 1080p), editado e o original é apagado no fim. Para revisar ou remontar depois, ele é baixado de novo sozinho."
+                : "Link do YouTube ou caminho local (o arquivo não é enviado nem copiado, é lido direto de onde está)."}
+            </p>
           </>
         )}
         <input ref={entrada} type="file" accept={EXTENSOES.join(",")} className="hidden" onChange={(e) => escolher(e.target.files?.[0])} />

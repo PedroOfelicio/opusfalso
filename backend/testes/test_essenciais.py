@@ -179,6 +179,39 @@ class ContinuarDeOndeParou(Temporario):
         self.assertEqual((novo["status"], novo.get("corte_assinatura")), ("fila", "sig"))
 
 
+# ---------------------------------------------------------------- links e muitos clipes
+
+class LinksEMuitosClipes(Temporario):
+    def test_reconhece_link(self):
+        import youtube
+        self.assertTrue(youtube.e_link(" https://youtu.be/abc "))
+        self.assertFalse(youtube.e_link("C:/videos/live.mp4"))
+        self.assertFalse(youtube.e_link("https://a.com/x y"))
+
+    def test_janelas_dividem_a_live(self):
+        partes = pipeline.janelas(7200, 70)
+        self.assertEqual(len(partes), 12)
+        self.assertEqual(sum(q for *_, q in partes), 70)
+        self.assertEqual((partes[0][0], partes[-1][1]), (0.0, 7200.0))
+        self.assertEqual(pipeline.janelas(300, 5), [(0.0, 300.0, 5)])
+
+    def test_apaga_o_original_so_sem_trabalho_pendente(self):
+        import youtube
+        video = self.pasta / "links" / "Youtube_x.mp4"
+        video.parent.mkdir()
+        video.write_bytes(b"x")
+        meta = {"id": "p1", "video": str(video), "origem_url": "https://youtu.be/x", "opcoes": {}}
+        with mock.patch.object(youtube, "PASTA", video.parent),                 mock.patch.object(youtube.projetos, "ler", return_value=meta),                 mock.patch.object(youtube.armazenamento, "em_uso", return_value=False):
+            youtube.liberar_video("p1", pendentes=1)
+            self.assertTrue(video.exists())  # ainda há job na fila do projeto
+            meta["opcoes"]["apagar_original"] = False
+            youtube.liberar_video("p1")
+            self.assertTrue(video.exists())  # o usuário pediu para manter
+            meta["opcoes"]["apagar_original"] = True
+            youtube.liberar_video("p1")
+            self.assertFalse(video.exists())
+
+
 # ---------------------------------------------------------------- textos e validação
 
 class TextosDoPost(unittest.TestCase):
@@ -333,3 +366,35 @@ class Musica(Temporario):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------- direção de arte
+
+class DirecaoDeArte(unittest.TestCase):
+    def test_valida_so_o_que_existe_no_catalogo(self):
+        import direcao
+        v = direcao.valida({"preset": "Gamer", "cor": "#ff0000", "look": "Dramático", "transicao": "explosao",
+                            "zoom": "forte", "impacto": "tremor"}, ["gamer", "cinema"])
+        self.assertEqual(v, {"preset": "gamer", "cor": "#FF0000", "look": "dramatico", "zoom": "forte", "impacto": "tremor"})
+        self.assertEqual(direcao.valida("lixo", ["gamer"]), {})
+
+    def test_padrao_do_clima_completa_a_escolha(self):
+        import direcao
+        d = direcao.efetiva({"look": "frio"}, "energetica")
+        self.assertEqual((d["look"], d["transicao"], d["preset"]), ("frio", "zoom_rapido", "gamer"))
+        self.assertEqual(direcao.efetiva(None, None)["transicao"], "pulso")
+
+    def test_transicao_so_nos_cortes_grandes(self):
+        import direcao
+        # abertura (2 s) + trechos com pulo curto (0,4 s, silêncio) e pulo grande (10 s, outro lance)
+        partes = [(50.0, 52.0), (10.0, 20.0), (20.4, 30.0), (40.0, 45.0)]
+        self.assertEqual(direcao.cortes_grandes(partes, True), [2.0, 21.6])
+
+    def test_efeitos_nao_quebram_o_quadro(self):
+        import numpy as np
+        import reenquadramento as rq
+        q = np.full((1920, 1080, 3), 100, dtype=np.uint8)
+        for tipo in ("flash", "desfoque", "tremor", "glitch"):
+            saida = rq._aplicar_efeito(q, tipo, 0.8, 7)
+            self.assertEqual(saida.shape, q.shape)
+        self.assertGreater(rq._aplicar_efeito(q, "flash", 1.0, 0).mean(), 200)

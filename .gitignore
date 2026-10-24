@@ -3,3 +3,4 @@ frontend/dist/
 __pycache__/
 *.pyc
 .venv/
+frontend/dist-demo/

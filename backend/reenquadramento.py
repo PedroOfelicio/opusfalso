@@ -413,6 +413,13 @@ class OpcoesRender:
     barra_progresso: dict | None = None  # {"cor": "#FFE600", "altura": 10}
     arquivo_ass: str | None = None     # legenda para queimar (caminho relativo a DADOS)
     video_apoio: str | None = None     # vídeo para a metade de baixo no layout split
+    # Direção de arte (direcao.py)
+    look: str | None = None            # filtro de cor do FFmpeg, aplicado antes da legenda
+    zoom_intensidade: float = 0.12     # força do zoom nas ênfases
+    transicao: str = "pulso"           # efeito nos cortes grandes
+    cortes: list = field(default_factory=list)     # instantes dos cortes grandes (tempo do clipe)
+    impacto: str = "nenhum"            # efeito nos picos de ação
+    impactos: list = field(default_factory=list)   # instantes dos picos (tempo do clipe)
 
 
 def _hex_bgr(cor: str):
@@ -453,7 +460,8 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
     if layout == "centro" or (layout == "rosto" and not analise.trilhas):
         cx[:] = W / 2 + opc.deslocamento_x * (W / 2)
         cy[:] = H / 2
-    z = zoom_por_frame(total, fps, opc.zoom_momentos, base=opc.zoom_base)
+    z = zoom_por_frame(total, fps, opc.zoom_momentos, intensidade=opc.zoom_intensidade, base=opc.zoom_base)
+    efeitos = _efeitos_por_quadro(opc, total, fps, z)
 
     facecam = _facecam(analise) if layout == "split" else None
     apoio = cv2.VideoCapture(opc.video_apoio) if (layout == "split" and opc.video_apoio and not facecam) else None
@@ -473,9 +481,10 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
     cmd = ["ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
            "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{LW}x{LH}", "-r", str(FPS_SAIDA), "-i", "-",
            "-i", str(entrada), "-map", "0:v", "-map", "1:a?"]
-    if opc.arquivo_ass:
-        cmd += ["-vf", f"ass={opc.arquivo_ass}:fontsdir=fontes"]
-    cmd += [*encoder_video(), "-c:a", "copy", "-shortest", "-movflags", "+faststart", str(saida)]
+    filtros = [f for f in (opc.look, f"ass={opc.arquivo_ass}:fontsdir=fontes" if opc.arquivo_ass else None) if f]
+    if filtros:
+        cmd += ["-vf", ",".join(filtros)]
+    cmd += [*encoder_video(leve=True), "-c:a", "copy", "-shortest", "-movflags", "+faststart", str(saida)]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE,
                             cwd=str(config.DADOS), creationflags=_SEM_JANELA)
 
@@ -491,6 +500,8 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
             if cancelado is not None and cancelado.is_set():
                 raise Cancelado()
             quadro = _compor(frame, layout, i, LW, LH, aspecto, cx, cy, z, facecam, apoio, dupla)
+            if i in efeitos:
+                quadro = _aplicar_efeito(quadro, *efeitos[i], i)
             if barra_cor:
                 cv2.rectangle(quadro, (0, 0), (int(LW * (i + 1) / total), barra_alt), barra_cor, -1)
             proc.stdin.write(quadro.tobytes())
@@ -513,6 +524,47 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
     if proc.returncode != 0:
         raise RuntimeError(f"FFmpeg falhou no reenquadramento: {proc.stderr.read().decode(errors='ignore')[-600:]}")
     return {"layout": layout, "pessoas": len(analise.trilhas), "detector": analise.detector}
+
+
+DURACAO_EFEITO = {"flash": 0.15, "zoom_rapido": 0.3, "desfoque": 0.25, "tremor": 0.3, "glitch": 0.15}
+
+
+def _efeitos_por_quadro(opc: OpcoesRender, total: int, fps: float, z: np.ndarray) -> dict[int, tuple[str, float]]:
+    """Quadro -> (efeito, força 0-1, caindo até 0). O zoom rápido entra direto no zoom do quadro."""
+    efeitos: dict[int, tuple[str, float]] = {}
+    pedidos = [(t, opc.transicao) for t in opc.cortes if opc.transicao not in ("pulso", None)]
+    pedidos += [(t, opc.impacto) for t in opc.impactos if opc.impacto not in ("nenhum", None)]
+    for t, tipo in pedidos:
+        dur = DURACAO_EFEITO.get(tipo, 0.2)
+        for i in range(int(t * fps), min(total, int((t + dur) * fps) + 1)):
+            forca = max(0.0, 1 - (i / fps - t) / dur)
+            if tipo == "zoom_rapido":
+                z[i] *= 1 + 0.22 * forca * forca
+            elif forca > 0:
+                efeitos[i] = (tipo, forca)
+    return efeitos
+
+
+def _aplicar_efeito(q: np.ndarray, tipo: str, forca: float, i: int) -> np.ndarray:
+    h, w = q.shape[:2]
+    if tipo == "flash":
+        return cv2.addWeighted(q, 1 - 0.85 * forca, np.full_like(q, 255), 0.85 * forca, 0)
+    if tipo == "desfoque":
+        k = int(45 * forca) // 2 * 2 + 1
+        return cv2.GaussianBlur(q, (k, k), 0) if k > 1 else q
+    if tipo == "tremor":
+        a = 0.02 * w * forca
+        m = np.float32([[1, 0, a * np.sin(i * 2.1)], [0, 1, a * np.cos(i * 2.9)]])
+        return cv2.warpAffine(q, m, (w, h), borderMode=cv2.BORDER_REFLECT)
+    if tipo == "glitch":
+        d = max(1, int(0.018 * w * forca))
+        saida = q.copy()
+        saida[:, :, 2] = np.roll(q[:, :, 2], d, axis=1)
+        saida[:, :, 0] = np.roll(q[:, :, 0], -d, axis=1)
+        faixa = slice(int(h * (0.3 + 0.4 * ((i * 37) % 10) / 10)), None)
+        saida[faixa] = np.roll(saida[faixa], d * 2, axis=1)[: saida[faixa].shape[0]]
+        return saida
+    return q
 
 
 def _compor(frame, layout, i, LW, LH, aspecto, cx, cy, z, facecam, apoio, dupla):

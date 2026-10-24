@@ -14,6 +14,7 @@ Formato salvo:
 }
 """
 import hashlib
+import threading
 import logging
 import os
 import site
@@ -60,8 +61,26 @@ def hash_arquivo(caminho: str | Path) -> str:
     return h.hexdigest()[:16]
 
 
+_trava_indice = threading.Lock()
+
+
 def pasta_cache(caminho_video: str | Path) -> Path:
-    pasta = config.PASTA_CACHE / hash_arquivo(caminho_video)
+    """Pasta de cache do vídeo (transcrição, análise de áudio), pelo conteúdo do arquivo. Guarda também
+    caminho -> hash: um vídeo baixado por link e já apagado continua achando a transcrição dele."""
+    caminho = Path(caminho_video)
+    arq_indice = config.PASTA_CACHE / "indice_videos.json"
+    if caminho.exists():
+        chave = hash_arquivo(caminho)
+        with _trava_indice:
+            indice = config.ler_json(arq_indice, {}) or {}
+            if indice.get(str(caminho)) != chave:
+                indice[str(caminho)] = chave
+                config.gravar_json(arq_indice, indice)
+    else:
+        chave = (config.ler_json(arq_indice, {}) or {}).get(str(caminho))
+        if not chave:
+            raise FileNotFoundError(f"Vídeo não encontrado: {caminho}")
+    pasta = config.PASTA_CACHE / chave
     pasta.mkdir(parents=True, exist_ok=True)
     return pasta
 

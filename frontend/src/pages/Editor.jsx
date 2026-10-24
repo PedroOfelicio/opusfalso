@@ -4,11 +4,11 @@ import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft, AudioLines, Crop, Download, Loader2, Minus, Pause, Play, Plus, RotateCcw, Save, Subtitles, Type, Upload,
 } from "lucide-react";
-import { api, CLIMAS, formatarTempoPreciso } from "../api";
+import { api, CLIMAS, formatarTempoPreciso, MODO_DEMO } from "../api";
 import ScoreBadge from "../components/ScoreBadge";
 import { Alternador, Aviso, Botao, EstadoErro, Esqueleto, Segmentado, usePolling, useAvisar } from "../components/ui";
 
-const CHAVES = ["formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom", "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura", "limpar_voz"];
+const CHAVES = ["look", "transicao", "zoom_forca", "impacto", "formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom", "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura", "limpar_voz"];
 const CORES_RAPIDAS = ["#FFE600", "#22FF6B", "#3B82F6", "#FF4FD8", "#FF8A00", "#FFFFFF"];
 const LAYOUTS = [
   { id: "auto", rotulo: "Automático", texto: "Escolhe conforme o vídeo e os rostos encontrados" },
@@ -38,6 +38,9 @@ function rascunhoDe(clip) {
     palavras_editadas: { ...(clip.palavras_editadas || {}) },
   };
 }
+
+const LOOKS = { natural: "Natural", vibrante: "Vibrante", cinema: "Cinema", quente: "Quente", frio: "Frio", dramatico: "Dramático", preto_branco: "Preto e branco", retro: "Retrô" };
+const TRANSICOES = { pulso: "Só pulso de zoom", flash: "Flash", zoom_rapido: "Zoom rápido", desfoque: "Desfoque", tremor: "Tremor", glitch: "Glitch" };
 
 export default function Editor() {
   const { id, cid } = useParams();
@@ -198,7 +201,7 @@ export default function Editor() {
                 <video
                   key={fonte + (clip.versao || 0)}
                   ref={video}
-                  src={fonte === "final" ? clip.video_url : `/api/projetos/${id}/video`}
+                  src={fonte === "final" || MODO_DEMO ? clip.video_url : `/api/projetos/${id}/video`}
                   className="absolute inset-0 size-full object-contain rounded-xl"
                   onClick={alternarPlay}
                   onPlay={() => setTocando(true)}
@@ -381,6 +384,29 @@ export default function Editor() {
                   </div>
                 )}
                 <Alternador ativo={!!cfg.zoom} aoMudar={(v) => mudarConfig("zoom", v)} rotulo="Zoom automático" descricao="Aproxima suavemente nas palavras de ênfase e nos picos (gameplay)" />
+                <div className="pt-2 border-t border-borda">
+                  <div className="rotulo mb-1">Direção de arte</div>
+                  <p className="text-xs text-apagado mb-3">
+                    {clip.direcao && Object.keys(clip.direcao).length ? "Escolhida pelo Claude para este clipe; mude o que quiser." : "Padrão do clima do clipe."}
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      ["look", "Cor do vídeo", LOOKS],
+                      ["transicao", "Transição nos cortes", TRANSICOES],
+                      ["zoom_forca", "Força do zoom", { suave: "Suave", medio: "Médio", forte: "Forte" }],
+                      ["impacto", "Efeito no pico (gameplay)", { nenhum: "Nenhum", tremor: "Tremor", flash: "Flash", glitch: "Glitch" }],
+                    ].map(([chave, rotulo, opcoes]) => (
+                      <label key={chave} className="text-xs text-suave">
+                        {rotulo}
+                        <select value={cfg[chave] || ""} onChange={(e) => mudarConfig(chave, e.target.value)} className="campo mt-1 !py-1.5 text-sm cursor-pointer">
+                          {Object.entries(opcoes).map(([k, r]) => (
+                            <option key={k} value={k}>{r}</option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                </div>
               </>
             )}
 

@@ -36,6 +36,7 @@ import pipeline
 import planejador_llm as llm
 import projetos
 import transcricao as tr
+import youtube
 from jobs import fila
 from modelos import Template
 
@@ -64,8 +65,19 @@ def _inicio():
                 mudou = True
         if mudou:
             projetos.salvar(meta)
+        if meta.get("origem_url") and meta["status"] == "pronto":
+            youtube.liberar_video(meta["id"])  # original de link baixado de novo só para uma prévia
+    fila.antes = _antes_do_job
+    fila.depois = youtube.liberar_video
     fila.iniciar()
     log.info("API pronta. Dados em %s", config.DADOS)
+
+
+def _antes_do_job(pid: str, cancelado, tipo: str):
+    """Vídeo de link já apagado: baixa de novo antes de reexportar, regenerar etc. (o processamento
+    completo baixa por conta própria, mostrando o andamento)."""
+    if tipo != "processar":
+        youtube.garantir_video(pid, None, cancelado)
 
 
 # ================================================================ utilidades
@@ -353,6 +365,15 @@ async def _criar(instrucao: str, modo: str, opcoes: str, caminho: str, arquivo: 
         finally:
             temporario.unlink(missing_ok=True)
         meta = projetos.criar(destino, arquivo.filename, modo, instrucao, opc, ja_copiado=True, tipo=tipo)
+    elif youtube.e_link(caminho):
+        try:
+            info = youtube.informacoes(caminho)
+        except youtube.ErroLink as e:
+            raise HTTPException(400, str(e))
+        meta = projetos.criar(youtube.caminho_local(info), info["titulo"], modo, instrucao, opc,
+                              ja_copiado=True, tipo=tipo)
+        meta = projetos.atualizar(meta["id"], lambda m: m.update(origem_url=caminho.strip(),
+                                                                 duracao_video=info["duracao"]))
     elif caminho.strip():
         video = Path(caminho.strip().strip('"')).expanduser()
         if not video.is_file():
@@ -361,7 +382,7 @@ async def _criar(instrucao: str, modo: str, opcoes: str, caminho: str, arquivo: 
             raise HTTPException(400, f"Formato não suportado: {video.suffix}")
         meta = projetos.criar(video.resolve(), video.name, modo, instrucao, opc, tipo=tipo)
     else:
-        raise HTTPException(400, "Envie um arquivo de vídeo ou informe o caminho local")
+        raise HTTPException(400, "Envie um arquivo de vídeo, o caminho local ou um link do YouTube")
 
     _enfileirar_processamento(meta["id"])
     return _publico(projetos.ler(meta["id"]))
@@ -408,7 +429,31 @@ def revisar_longo(pid: str, dados: Revisao):
     return _publico(projetos.ler(pid))
 
 
-_trava_previa = threading.BoundedSemaphore(2)  # a lista pede várias prévias/quadros ao mesmo tempo
+_trava_previa = threading.BoundedSemaphore(2)
+_baixando_de_novo: set[str] = set()
+
+
+def _original_disponivel(meta: dict) -> None:
+    """O original existe? Se veio de um link e foi apagado para economizar disco, começa a baixar de novo
+    em segundo plano e responde 409 (a tela tenta de novo depois)."""
+    if Path(meta["video"]).exists():
+        return
+    if not meta.get("origem_url"):
+        raise HTTPException(404, "Vídeo original não encontrado")
+    pid = meta["id"]
+    if pid not in _baixando_de_novo:
+        _baixando_de_novo.add(pid)
+
+        def baixar():
+            try:
+                youtube.garantir_video(pid)
+            except Exception as e:
+                log.warning("Não consegui baixar de novo o original de %s: %s", pid, e)
+            finally:
+                _baixando_de_novo.discard(pid)
+        threading.Thread(target=baixar, daemon=True).start()
+    raise HTTPException(409, "O original veio de um link e foi apagado para economizar espaço. "
+                             "Estou baixando de novo; tente em alguns minutos.")  # a lista pede várias prévias/quadros ao mesmo tempo
 
 
 @app.get("/api/projetos/{pid}/previa")
@@ -420,6 +465,7 @@ def previa_trecho(pid: str, inicio: float, fim: float):
         raise HTTPException(400, "Trecho inválido")
     arq = projetos.pasta(pid) / "tmp" / "previas" / f"{inicio:.2f}_{fim:.2f}.mp4"
     if not arq.exists():
+        _original_disponivel(meta)
         arq.parent.mkdir(parents=True, exist_ok=True)
         with _trava_previa:
             parcial = arq.with_name(arq.stem + "_parcial.mp4")
@@ -439,6 +485,7 @@ def quadro_original(pid: str, t: float):
     meta = _meta(pid)
     arq = projetos.pasta(pid) / "tmp" / "quadros" / f"{t:.1f}.jpg"
     if not arq.exists():
+        _original_disponivel(meta)
         with _trava_previa:
             try:
                 ef.extrair_frame(meta["video"], t, arq, largura=240)
@@ -466,7 +513,7 @@ def excluir_projeto(pid: str, apagar_saida: bool = False):
     fila.cancelar(pid)
     projetos.excluir(pid, apagar_saida)
     video = Path(meta.get("video") or "")
-    if video.parent == armazenamento.PASTA_VIDEOS and not armazenamento.em_uso(video):
+    if video.parent in (armazenamento.PASTA_VIDEOS, youtube.PASTA) and not armazenamento.em_uso(video):
         video.unlink(missing_ok=True)  # vídeo enviado que nenhum outro projeto usa
     return {"ok": True}
 
@@ -533,8 +580,7 @@ def thumb_projeto(pid: str):
 @app.get("/api/projetos/{pid}/video")
 def video_original(pid: str):
     meta = _meta(pid)
-    if not Path(meta["video"]).exists():
-        raise HTTPException(404, "Vídeo original não encontrado")
+    _original_disponivel(meta)
     return FileResponse(meta["video"])
 
 
@@ -595,7 +641,7 @@ class EdicaoClip(BaseModel):
     palavras_editadas: dict[str, str] | None = None
 
 
-CHAVES_CONFIG = {"formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom",
+CHAVES_CONFIG = {"look", "transicao", "zoom_forca", "impacto","formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom",
                  "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura",
                  "limpar_voz"}
 
@@ -646,7 +692,7 @@ def refazer_arquivos(pid: str):
     meta = _meta(pid)
     if meta["status"] in ("fila", "processando"):
         raise HTTPException(409, "O projeto já está sendo processado")
-    if not Path(meta["video"]).exists():
+    if not Path(meta["video"]).exists() and not meta.get("origem_url"):
         raise HTTPException(400, "O vídeo de origem também não existe mais: não dá para refazer")
     if meta.get("tipo") == "longo":
         if not meta.get("edicao"):

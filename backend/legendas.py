@@ -246,7 +246,8 @@ def renderizar_remotion(base, saida, palavras, est, titulo, duracao, largura, al
     cmd = ["node", str(PASTA_REMOTION / "node_modules" / "@remotion" / "cli" / "remotion-cli.js"),
            "render", "src/index.ts", "Clip", str(tmp_saida),
            f"--props={arq_props}", f"--public-dir={PUBLIC_REMOTION}",
-           "--codec=h264", "--crf=18", "--log=info", f"--concurrency={max(1, (os.cpu_count() or 4) // 2)}"]
+           "--codec=h264", "--crf=22",  # 22: leve para as redes, sem perda visível
+           "--log=info", f"--concurrency={max(1, (os.cpu_count() or 4) // 2)}"]
     proc = subprocess.Popen(cmd, cwd=str(PASTA_REMOTION), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, encoding="utf-8", errors="ignore", creationflags=_SEM_JANELA)
     ultimas = []

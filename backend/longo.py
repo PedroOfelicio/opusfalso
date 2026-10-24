@@ -36,6 +36,7 @@ import planejador_llm as llm
 import planejador_local as local
 import projetos
 import transcricao as tr
+import youtube
 from config import Cancelado
 from modelos import CLIMAS, Corte, MomentoLongo, PlanoEdicao
 
@@ -88,13 +89,12 @@ def processar(pid: str, cancelado=None) -> dict:
     opc = _opcoes(meta)
     prog = pipeline.Progresso(pid, etapas=ETAPAS, pesos=PESOS)
     video = meta["video"]
-    if not Path(video).exists():
-        raise FileNotFoundError(f"Vídeo não encontrado: {video}")
 
     projetos.atualizar(pid, lambda m: m.update(status="processando", iniciado_em=time.time(), erro=None,
                                                progresso=0.0, etapas={}, avisos=[], nao_atendido=[], longo=None,
                                                edicao=None))  # "Tentar de novo" só remonta se a edição for desta rodada
     pipeline.aviso_disco(pid)
+    baixou = pipeline.baixar_se_link(pid, meta, prog, cancelado)
     info = ef.sondar(video)
     if not (projetos.pasta(pid) / "thumb.jpg").exists():
         ef.extrair_frame(video, info["duracao"] * 0.1, projetos.pasta(pid) / "thumb.jpg", largura=640)
@@ -103,8 +103,9 @@ def processar(pid: str, cancelado=None) -> dict:
         saida_dir=m.get("saida_dir") or str(projetos.pasta_saida_para(m["nome"], pid))))
     meta = projetos.ler(pid)
 
-    prog.etapa("transcrevendo")
-    transcricao = tr.transcrever(video, prog, cancelado)
+    if not baixou:
+        prog.etapa("transcrevendo")
+    transcricao = tr.transcrever(video, pipeline.progresso_apos_download(prog, baixou), cancelado)
 
     prog.etapa("analisando")
     analise = None
@@ -131,6 +132,7 @@ def remontar(pid: str, cancelado=None) -> dict:
                                                progresso=0.0, etapas={}))
     for etapa in ("transcrevendo", "analisando", "decidindo"):  # já feitas: só marca como concluídas
         prog.etapa(etapa)
+    youtube.garantir_video(pid, None, cancelado)  # vídeo de link já apagado: baixa de novo
     info = ef.sondar(meta["video"])
     transcricao = tr.transcrever(meta["video"])  # cache
     return _montar_e_finalizar(pid, opc, meta["edicao"], transcricao, info, prog, cancelado)

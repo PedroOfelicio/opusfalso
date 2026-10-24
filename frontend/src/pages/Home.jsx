@@ -56,6 +56,7 @@ export default function Home() {
   const [titulo, setTitulo] = useState(true);
   const [barra, setBarra] = useState(null); // null = padrão do estilo de legenda
   const [abertura, setAbertura] = useState(true);
+  const [diretor, setDiretor] = useState(true); // o Claude varia o visual de cada clipe
   const [limparVoz, setLimparVoz] = useState(null); // null = automático (fala sim, gameplay não)
   const [templates, setTemplates] = useState({});
   const [template, setTemplate] = useState(null);
@@ -103,6 +104,7 @@ export default function Home() {
     const t = templates[id];
     setTemplate(id);
     if (!t) return;
+    setDiretor(false); // template = visual fixo escolhido por você
     if (t.modo) setModo(t.modo);
     setPreset(t.preset);
     setCor(t.cor || null);
@@ -153,6 +155,16 @@ export default function Home() {
 
   const pronto = usarCaminho ? caminho.trim().length > 3 : !!arquivo;
 
+  // Muitos clipes (lives longas): a legenda simples renderiza ~4x mais rápido que a animada
+  const mudarNumClips = (n) => {
+    const novo = Math.max(1, Math.min(100, n));
+    if (novo > 20 && numClips <= 20 && animada) {
+      setAnimada(false);
+      avisar("Com muitos clipes, troquei para a legenda simples (renderiza ~4x mais rápido). Dá para voltar nas opções.");
+    }
+    setNumClips(novo);
+  };
+
   const gerar = useCallback(async () => {
     if (!pronto || enviando !== null) return;
     setEnviando(0);
@@ -168,7 +180,7 @@ export default function Home() {
             estilo_legenda: animada ? "animada" : "simples", layout, cor, template,
             zoom, remover_silencios: silencios, titulo, barra, abertura, limpar_voz: limparVoz,
             musica: musica === "arquivo" ? musicaArquivo.trim() : musica, efeitos_sonoros: efeitos,
-            video_apoio: apoio || null, ver_imagens: verImagens,
+            video_apoio: apoio || null, ver_imagens: verImagens, diretor,
           },
         },
         setEnviando,
@@ -178,7 +190,7 @@ export default function Home() {
       avisar(e.message, "erro");
       setEnviando(null);
     }
-  }, [pronto, enviando, usarCaminho, arquivo, caminho, instrucao, modo, numClips, duracao, formato, preset, animada, layout, musica, musicaArquivo, efeitos, cor, template, zoom, silencios, titulo, barra, abertura, limparVoz, apoio, verImagens, navegar, avisar]);
+  }, [pronto, enviando, usarCaminho, arquivo, caminho, instrucao, modo, numClips, duracao, formato, preset, animada, layout, musica, musicaArquivo, efeitos, cor, template, zoom, silencios, titulo, barra, abertura, limparVoz, apoio, verImagens, diretor, navegar, avisar]);
 
   // Ctrl+Enter = gerar
   useEffect(() => {
@@ -258,21 +270,25 @@ export default function Home() {
           </div>
         ) : (
           <div className="p-3">
-            <label className="rotulo">Caminho do vídeo no seu computador</label>
+            <label className="rotulo">Link do YouTube ou caminho no seu computador</label>
             <input
               autoFocus
               value={caminho}
               onChange={(e) => setCaminho(e.target.value)}
-              placeholder="C:\Users\voce\Videos\podcast.mp4"
+              placeholder="https://youtube.com/watch?v=...  ou  C:\Users\voce\Videos\live.mp4"
               className="campo mt-2 font-mono text-[13px]"
             />
-            <p className="text-xs text-apagado mt-2">O arquivo não é copiado: o processamento lê direto de onde ele está.</p>
+            <p className="text-xs text-apagado mt-2">
+              {/^\s*https?:\/\//.test(caminho)
+                ? "O vídeo é baixado (até 1080p), processado e apagado no fim: só os clipes ficam no seu PC. Para editar depois, ele é baixado de novo sozinho."
+                : "O arquivo não é copiado: o processamento lê direto de onde ele está."}
+            </p>
           </div>
         )}
         <div className="flex justify-center py-2">
           <button onClick={() => setUsarCaminho(!usarCaminho)} className="text-xs text-suave hover:text-texto inline-flex items-center gap-1.5 cursor-pointer">
             <FolderInput className="size-3.5" />
-            {usarCaminho ? "Enviar arquivo em vez disso" : "Ou colar um caminho local (sem upload, mais rápido)"}
+            {usarCaminho ? "Enviar arquivo em vez disso" : "Ou colar um link do YouTube ou um caminho local"}
           </button>
         </div>
 
@@ -379,9 +395,16 @@ export default function Home() {
           <div>
             <div className="rotulo mb-2">Nº de clipes</div>
             <div className="inline-flex items-center rounded-xl border border-borda bg-fundo">
-              <button className="px-3 py-2 text-suave hover:text-texto cursor-pointer" onClick={() => setNumClips(Math.max(1, numClips - 1))}>−</button>
-              <span className="w-8 text-center font-semibold tabular-nums">{numClips}</span>
-              <button className="px-3 py-2 text-suave hover:text-texto cursor-pointer" onClick={() => setNumClips(Math.min(15, numClips + 1))}>+</button>
+              <button className="px-3 py-2 text-suave hover:text-texto cursor-pointer" onClick={() => mudarNumClips(numClips > 10 ? numClips - 5 : numClips - 1)}>−</button>
+              <span className="w-9 text-center font-semibold tabular-nums">{numClips}</span>
+              <button className="px-3 py-2 text-suave hover:text-texto cursor-pointer" onClick={() => mudarNumClips(numClips >= 10 ? numClips + 5 : numClips + 1)}>+</button>
+            </div>
+            <div className="flex gap-1.5 mt-2">
+              {[10, 30, 50, 70, 100].map((n) => (
+                <button key={n} onClick={() => mudarNumClips(n)} className={`text-xs px-2 py-0.5 rounded-md border cursor-pointer ${numClips === n ? "border-roxo text-texto" : "border-borda text-suave hover:text-texto"}`}>
+                  {n}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -456,6 +479,7 @@ export default function Home() {
             <Alternador ativo={silencios} aoMudar={setSilencios} rotulo="Remover silêncios e vícios" descricao="Corta pausas longas e “hum”, “é”, “tipo” isolados" />
             <Alternador ativo={titulo} aoMudar={setTitulo} rotulo="Título gancho" descricao="Aparece nos primeiros segundos" />
             <Alternador ativo={limparVoz ?? modo === "falado"} aoMudar={setLimparVoz} rotulo="Melhorar a voz" descricao="Tira ruído de fundo e zumbido (automático na fala)" />
+            <Alternador ativo={diretor} aoMudar={setDiretor} rotulo="Diretor de arte (IA)" descricao="O Claude escolhe legenda, cor, transições, zoom e efeitos de cada clipe pelo clima do trecho. Desligado: todos iguais ao estilo escolhido" />
             <Alternador ativo={abertura} aoMudar={setAbertura} rotulo="Abrir com o clímax" descricao="1-2 s do melhor momento antes do contexto (segura nos 3 primeiros segundos)" />
             <Alternador ativo={barra ?? !!estilos[preset]?.barra_progresso?.ativa} aoMudar={setBarra} rotulo="Barra de progresso" descricao="Enche no topo durante o clipe" />
             {modo === "gameplay" && (

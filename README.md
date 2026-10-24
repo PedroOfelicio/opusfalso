@@ -78,6 +78,25 @@ na tela, na seção "Não atendido".
   um **pacote grátis de 16 faixas CC0** para baixar em Configurações, e **efeitos sonoros** automáticos (whoosh
   no título, impacto nas kills, pop nos zooms). O volume de cada faixa é igualado e, nos clipes, a introdução
   quieta da música é pulada.
+- **Diretor de arte (IA)**: na mesma chamada que escolhe os cortes, o Claude define o visual de cada clipe
+  pelo clima do trecho, numa lista fechada (`backend/direcao.py`): estilo e cor da legenda, look de cor
+  (natural, vibrante, cinema, quente, frio, dramático, preto e branco, retrô; filtros do FFmpeg aplicados
+  antes da legenda), transição nos cortes grandes (flash, zoom rápido, desfoque, tremor, glitch ou só o pulso
+  de zoom; os cortes de silêncio não ganham transição), força do zoom e efeito no pico de ação do gameplay.
+  Sem o Claude, vale o padrão do clima. Escolher um template desliga o diretor (visual fixo); no editor, a aba
+  Enquadramento mostra e deixa trocar cada escolha. Custo: ~US$ 0,001 por clipe.
+- **Link do YouTube** em vez do arquivo (clipes curtos e vídeos longos): o app baixa com o `yt-dlp` (até
+  1080p), processa e **apaga o original no fim**, então o bruto da live não fica ocupando o disco. Se depois
+  for preciso de novo (reexportar um clipe, regenerar, revisar ou remontar o vídeo longo), ele é baixado de
+  novo pelo link, sozinho; a transcrição e as análises continuam no cache (indexadas pelo caminho). A opção
+  `apagar_original: false` mantém o arquivo. Live ainda no ar, playlist e vídeo privado dão mensagem clara.
+- **Muitos clipes** (até 100, ex.: 70 clipes de uma live de 2 h): acima de 8, a escolha é feita por janelas
+  do vídeo (~6 clipes por janela de igual duração), então cada pedido ao Claude fica pequeno e os clipes saem
+  espalhados pela live inteira; parte fraca da live simplesmente não dá clipe. O corte e o render são feitos um
+  clipe de cada vez, apagando os intermediários logo em seguida (os primeiros clipes já ficam prontos para
+  ver). Acima de 20, a tela troca para a legenda simples (~4x mais rápida que a animada).
+- **Clipes mais leves**: o clipe final sai com teto de 8 Mbps (NVENC cq 23; Remotion crf 22), que em
+  1080x1920 é de sobra para as redes; um clipe de 34 s caiu de ~50 MB para ~20-30 MB.
 - **Continuar de onde parou**: depois de um erro, de um cancelamento ou do servidor reiniciado, "Tentar de
   novo" reaproveita as respostas do Claude que já chegaram (sem pagar de novo), os clipes já prontos e os
   cortes já feitos; no vídeo longo, remonta com a edição salva e os blocos em cache. "Refazer" um projeto
@@ -544,7 +563,7 @@ Base: `http://127.0.0.1:8000`. Documentação interativa em `/docs`.
 | PUT/DELETE | `/api/estilos/{nome}` | Criar/editar ou excluir preset |
 | GET | `/api/fontes`, `/api/fontes/{arquivo}` | Fontes disponíveis (com nome interno) |
 | GET | `/api/projetos` | Lista resumida |
-| POST | `/api/projetos` | Cria projeto (multipart: `arquivo` **ou** `caminho`, `instrucao`, `modo`, `opcoes` em JSON) e enfileira |
+| POST | `/api/projetos` | Cria projeto (multipart: `arquivo` **ou** `caminho`, que também aceita um link do YouTube; `instrucao`, `modo`, `opcoes` em JSON, com `num_clips` até 100) e enfileira |
 | POST | `/api/longos` | Cria vídeo longo (mesmo formato; `opcoes`: `modo_longo` enxugar/melhores, `alvo_min`, `abertura`, `zoom`, `legenda`, `preset`, `musica`, `efeitos`, `ver_imagens`, `cortar_parado`, `remover_erros`) |
 | GET | `/api/projetos/{id}/longo/video` · `/longo/srt` · `/longo/texto` · `/longo/thumb/{k}` | Arquivos do vídeo longo |
 | PUT | `/api/projetos/{id}/edicao` | Revisão do vídeo longo (`ritmo`, `abertura_ativa`, `remocoes`, `capitulos`, `momentos`) e remontagem |

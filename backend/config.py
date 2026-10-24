@@ -119,10 +119,16 @@ def pasta_saida() -> Path:
 
 
 def ler_json(caminho: Path, padrao=None):
-    try:
-        return json.loads(Path(caminho).read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
-        return padrao
+    # No Windows, ler no instante em que gravar_json troca o arquivo dá "acesso negado": tenta de novo
+    for tentativa in range(20):
+        try:
+            return json.loads(Path(caminho).read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            return padrao
+        except PermissionError:
+            if tentativa == 19:
+                raise
+            time.sleep(0.05)
 
 
 def gravar_json(caminho: Path, dados) -> None:

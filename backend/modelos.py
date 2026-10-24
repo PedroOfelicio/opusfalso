@@ -88,7 +88,7 @@ class Legenda(BaseModel):
 
 class PlanoEdicao(BaseModel):
     """Plano de edição gerado a partir da instrução em linguagem natural."""
-    num_clips: int = Field(3, ge=1, le=20)
+    num_clips: int = Field(3, ge=1, le=100)
     duracao_min: float = Field(30, ge=5, le=180)
     duracao_max: float = Field(60, ge=5, le=180)
     formato: Literal["9:16", "16:9", "1:1"] = "9:16"
@@ -176,6 +176,12 @@ class Corte(BaseModel):
     pico: float | None = None  # só no gameplay: instante do pico de energia (preenchido pelo código)
     legenda_post: str = ""     # texto para a descrição do post (TikTok/Reels/Shorts)
     hashtags: list[str] = Field(default_factory=list)
+    direcao: dict = Field(default_factory=dict)  # direção de arte do clipe (validada em direcao.valida)
+
+    @field_validator("direcao", mode="before")
+    @classmethod
+    def _direcao(cls, v):
+        return v if isinstance(v, dict) else {}
 
     @field_validator("legenda_post", mode="before")
     @classmethod
@@ -244,6 +250,12 @@ class EscolhaGameplay(BaseModel):
     correcoes: list[Correcao] = Field(default_factory=list)
     legenda_post: str = ""
     hashtags: list[str] = Field(default_factory=list)
+    direcao: dict = Field(default_factory=dict)  # direção de arte do clipe (validada em direcao.valida)
+
+    @field_validator("direcao", mode="before")
+    @classmethod
+    def _direcao(cls, v):
+        return v if isinstance(v, dict) else {}
 
     @field_validator("remover", mode="before")
     @classmethod
