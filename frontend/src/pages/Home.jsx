@@ -39,6 +39,8 @@ export default function Home() {
   const [reacoes, setReacoes] = useState(true);
   const [diretor, setDiretor] = useState(true);
   const [apoio, setApoio] = useState("");
+  const [replay, setReplay] = useState(true);
+  const [loop, setLoop] = useState(true);
   // vídeo longo
   const [modoLongo, setModoLongo] = useState("enxugar");
   const [alvo, setAlvo] = useState(10);
@@ -111,7 +113,7 @@ export default function Home() {
             num_clips: numClips, duracao: DURACOES[duracao], formato, preset, estilo_legenda: animada ? "animada" : "simples",
             layout, zoom, remover_silencios: silencios, titulo, abertura, limpar_voz: limparVoz,
             musica, efeitos_sonoros: efeitos, video_apoio: apoio || null, ver_imagens: verImagens,
-            diretor, broll, reacoes, idioma_legenda: idiomaLegenda,
+            diretor, broll, reacoes, idioma_legenda: idiomaLegenda, replay, loop,
           },
         }, setEnviando);
         navegar(`/projetos/${p.id}`);
@@ -130,7 +132,7 @@ export default function Home() {
       avisar(e.message, "erro");
       setEnviando(null);
     }
-  }, [pronto, enviando, arquivo, caminho, instrucao, modo, tipo, numClips, duracao, formato, preset, animada, layout, zoom, silencios, titulo, abertura, limparVoz, musica, efeitos, apoio, verImagens, diretor, broll, reacoes, idiomaLegenda, modoLongo, alvo, legendaLonga, cortarParado, removerErros, ritmo, navegar, avisar]);
+  }, [pronto, enviando, arquivo, caminho, instrucao, modo, tipo, numClips, duracao, formato, preset, animada, layout, zoom, silencios, titulo, abertura, limparVoz, musica, efeitos, apoio, verImagens, diretor, broll, reacoes, idiomaLegenda, replay, loop, modoLongo, alvo, legendaLonga, cortarParado, removerErros, ritmo, navegar, avisar]);
 
   // Ctrl+Enter = começar
   useEffect(() => {
@@ -370,6 +372,10 @@ export default function Home() {
                 <Alternador ativo={titulo} aoMudar={setTitulo} rotulo="Título gancho" descricao="Nos primeiros segundos do clipe" />
                 <Alternador ativo={reacoes} aoMudar={setReacoes} rotulo="Textos de reação" descricao="“ESPERA...”, “KKKK” no susto e na virada" />
                 <Alternador ativo={silencios} aoMudar={setSilencios} rotulo="Cortar silêncios" descricao="Pausas longas e “hum”, “é”, “tipo”" />
+                <Alternador ativo={loop} aoMudar={setLoop} rotulo="Final em loop" descricao="Termina sem fade, emendando no começo quando o vídeo repete" />
+                {modo === "gameplay" && (
+                  <Alternador ativo={replay} aoMudar={setReplay} rotulo="Replay em câmera lenta" descricao="O lance repete no fim, a meia velocidade, com som grave" />
+                )}
               </>
             )}
             {tipo === "longo" && modo === "falado" && (

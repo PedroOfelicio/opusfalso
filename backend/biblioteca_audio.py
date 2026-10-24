@@ -31,6 +31,8 @@ EFEITOS = {
     "whoosh": "entrada do título gancho",
     "impacto": "picos do gameplay (kills, explosões)",
     "pop": "zoom nas palavras de ênfase",
+    "riser": "som que sobe antes do pico (tensão)",
+    "grave": "impacto grave na hora da kill / do susto",
 }
 
 LEIAME = """Biblioteca de áudio do Clipador

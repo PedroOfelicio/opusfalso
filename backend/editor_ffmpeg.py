@@ -363,7 +363,8 @@ def _n_entradas(entradas: list) -> int:
     return len([x for x in entradas if x == "-i"])
 
 
-def _cama_musical(entradas: list, filtros: list, musica, volume: float, duracao: float | None) -> None:
+def _cama_musical(entradas: list, filtros: list, musica, volume: float, duracao: float | None,
+                  loop: bool = False) -> None:
     """Cria o rótulo [mus]. `musica` é um arquivo (em loop, a partir do início útil, com fade no fim) ou uma
     trilha [(início no vídeo, arquivo), ...]: cada faixa entra no seu ponto com crossfade (vídeos longos)."""
     if isinstance(musica, (list, tuple)) and len(musica) == 1:
@@ -375,7 +376,8 @@ def _cama_musical(entradas: list, filtros: list, musica, volume: float, duracao:
         cadeia = (f"[{idx}:a]atrim=start={m['inicio']:.2f},asetpts=PTS-STARTPTS,"
                   f"volume={_ganho_musica(musica):.1f}dB,volume={volume:.2f},aresample=48000")
         if duracao:
-            cadeia += f",afade=t=in:d=0.4,afade=t=out:st={max(0.0, duracao - 1.5):.2f}:d=1.5"
+            cadeia += ",afade=t=in:d=0.4" if loop else (
+                f",afade=t=in:d=0.4,afade=t=out:st={max(0.0, duracao - 1.5):.2f}:d=1.5")
         filtros.append(cadeia + "[mus]")
         return
     rotulos = []
@@ -405,7 +407,7 @@ def _musica_existe(musica) -> bool:
 
 def _mixar_audio(entradas: list, filtros: list, atual: str, normalizar: bool, musica,
                  efeitos: list | None, volume_musica: float = 0.35, limpar_voz: bool = False,
-                 duracao: float | None = None) -> str:
+                 duracao: float | None = None, loop: bool = False) -> str:
     """Limpeza de voz (opcional), normalização (-14 LUFS), música com ducking e efeitos sonoros por cima
     do rótulo `atual`. Acrescenta entradas/filtros nas listas e devolve o rótulo do áudio final.
     musica: um arquivo ou uma trilha [(início, arquivo), ...] (ver _cama_musical)."""
@@ -419,7 +421,7 @@ def _mixar_audio(entradas: list, filtros: list, atual: str, normalizar: bool, mu
     if _musica_existe(musica):
         # "Ducking": a música abaixa sozinha quando há voz
         filtros.append(f"[{atual}]asplit=2[voz][sc]")
-        _cama_musical(entradas, filtros, musica, volume_musica, duracao)
+        _cama_musical(entradas, filtros, musica, volume_musica, duracao, loop)
         filtros.append("[mus][sc]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=350[musd]")
         filtros.append("[voz][musd]amix=inputs=2:duration=first:normalize=0[am]")
         atual = "am"
@@ -575,17 +577,21 @@ def juntar_blocos(blocos: list[Path], saida: str | Path, duracao: float, normali
 def cortar(video: str | Path, trechos: list[tuple[float, float]], saida: str | Path,
            normalizar: bool = True, musica: str | None = None, info: dict | None = None,
            efeitos: list[tuple[float, str, float]] | None = None, abertura: tuple[float, float] | None = None,
-           limpar_voz: bool = False, progresso=None, cancelado=None) -> Path:
+           limpar_voz: bool = False, replay: tuple[float, float] | None = None, loop: bool = False,
+           progresso=None, cancelado=None) -> Path:
     """Gera um clipe com os trechos concatenados (vídeo em resolução original, 30 fps).
     O enquadramento e a legenda são feitos depois, em cima deste arquivo.
     efeitos: (tempo no clipe, arquivo, volume) de cada efeito sonoro.
-    abertura: trecho (fora de ordem) que vai antes de tudo, como teaser do clímax."""
+    abertura: trecho (fora de ordem) que vai antes de tudo, como teaser do clímax.
+    replay: trecho do lance repetido no FIM em câmera lenta (metade da velocidade, som uma oitava abaixo).
+    loop: sem fade de saída na música, para o fim emendar no começo quando o vídeo repete."""
     info = info or sondar(video)
     saida = Path(saida)
     saida.parent.mkdir(parents=True, exist_ok=True)
     base = trechos[0][0]
     total = trechos[-1][1] - base
-    duracao_final = duracao_trechos(trechos) + (abertura[1] - abertura[0] if abertura else 0)
+    duracao_final = (duracao_trechos(trechos) + (abertura[1] - abertura[0] if abertura else 0)
+                     + (2 * (replay[1] - replay[0]) if replay else 0))
 
     # Com -ss antes do -i o tempo recomeça em 0; os trechos viram relativos a "base"
     sel = "+".join(f"between(t,{a - base:.3f},{b - base:.3f})" for a, b in trechos)
@@ -597,23 +603,42 @@ def cortar(video: str | Path, trechos: list[tuple[float, float]], saida: str | P
     else:
         entradas += ["-f", "lavfi", "-t", f"{duracao_final:.3f}", "-i", "anullsrc=r=48000:cl=stereo"]
         filtros.append("[1:a]anull[a0]")
+    filtros[0] = filtros[0].replace("[v]", "[vcorpo]")
+    partes = [("vcorpo", "a0")]
     if abertura:
         # Segunda leitura do mesmo arquivo só com o teaser; concatena antes do corpo
         idx = len([x for x in entradas if x == "-i"])
         entradas += ["-ss", f"{abertura[0]:.3f}", "-t", f"{abertura[1] - abertura[0]:.3f}", "-i", str(video)]
-        filtros[0] = filtros[0].replace("[v]", "[vcorpo]")
         filtros.append(f"[{idx}:v]fps={FPS_SAIDA},setpts=PTS-STARTPTS[vab]")
         if info["tem_audio"]:
             filtros.append(f"[{idx}:a]asetpts=PTS-STARTPTS,aresample=48000[aab]")
         else:
             filtros.append(f"anullsrc=r=48000:cl=stereo,atrim=0:{abertura[1] - abertura[0]:.3f}[aab]")
-        filtros.append("[vab][aab][vcorpo][a0]concat=n=2:v=1:a=1[v][acat]")
+        partes.insert(0, ("vab", "aab"))
+    if replay:
+        # Replay em câmera lenta: metade da velocidade, quadros intermediários misturados (não "pula")
+        # e o som do jogo uma oitava abaixo (o "slow motion" dos cortes de jogo)
+        idx = len([x for x in entradas if x == "-i"])
+        dur = replay[1] - replay[0]
+        entradas += ["-ss", f"{replay[0]:.3f}", "-t", f"{dur:.3f}", "-i", str(video)]
+        filtros.append(f"[{idx}:v]fps={FPS_SAIDA},setpts=2.0*(PTS-STARTPTS),"
+                       f"minterpolate=fps={FPS_SAIDA}:mi_mode=blend[vrep]")
+        if info["tem_audio"]:
+            filtros.append(f"[{idx}:a]asetpts=PTS-STARTPTS,aresample=48000,asetrate=24000,aresample=48000,"
+                           f"volume=0.8,atrim=0:{2 * dur:.3f}[arep]")
+        else:
+            filtros.append(f"anullsrc=r=48000:cl=stereo,atrim=0:{2 * dur:.3f}[arep]")
+        partes.append(("vrep", "arep"))
+    if len(partes) > 1:
+        entradas_concat = "".join(f"[{v}][{a}]" for v, a in partes)
+        filtros.append(f"{entradas_concat}concat=n={len(partes)}:v=1:a=1[v][acat]")
         filtros.append("[acat]aresample=48000[a1]")
         atual = "a1"
     else:
+        filtros.append("[vcorpo]null[v]")
         atual = "a0"
     atual = _mixar_audio(entradas, filtros, atual, normalizar, musica, efeitos, limpar_voz=limpar_voz,
-                         duracao=duracao_final)
+                         duracao=duracao_final, loop=loop)
 
     args = entradas + [
         "-filter_complex", ";".join(filtros),

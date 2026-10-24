@@ -441,7 +441,7 @@ def escolher_layout(opc: OpcoesRender, analise: Analise) -> str:
 
 
 def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
-               progresso=None, cancelado=None) -> dict:
+               progresso=None, cancelado=None, analise: "Analise | None" = None) -> dict:
     """Gera o vídeo final reenquadrado. Retorna informações (layout usado etc.)."""
     entrada, saida = Path(entrada), Path(saida)
     saida.parent.mkdir(parents=True, exist_ok=True)
@@ -450,7 +450,7 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
         if progresso:
             progresso(fase * 0.3 + p * (0.3 if fase == 0 else 0.7))
 
-    analise = analisar(entrada, cancelado, lambda p: prog(0, p))
+    analise = analise or analisar(entrada, cancelado, lambda p: prog(0, p))
     layout = escolher_layout(opc, analise)
     LW, LH = RESOLUCOES[opc.formato]
     aspecto = LW / LH

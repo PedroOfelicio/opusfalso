@@ -745,7 +745,7 @@ class EdicaoClip(BaseModel):
     palavras_editadas: dict[str, str] | None = None
 
 
-CHAVES_CONFIG = {"look", "transicao", "zoom_forca", "impacto", "broll", "reacoes", "idioma_legenda","formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom",
+CHAVES_CONFIG = {"look", "transicao", "zoom_forca", "impacto", "broll", "reacoes", "idioma_legenda", "replay", "loop","formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom",
                  "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura",
                  "limpar_voz"}
 

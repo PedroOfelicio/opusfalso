@@ -189,6 +189,8 @@ def config_clip(meta: dict, clip: dict) -> dict:
         "broll": c.get("broll", bool(meta["opcoes"].get("broll"))),
         "reacoes": c.get("reacoes", bool(meta["opcoes"].get("reacoes"))),
         "idioma_legenda": c.get("idioma_legenda", meta["opcoes"].get("idioma_legenda") or ""),
+        "replay": c.get("replay", meta["opcoes"].get("replay", True) if meta["modo"] == "gameplay" else False),
+        "loop": c.get("loop", meta["opcoes"].get("loop", True)),
         "formato": c.get("formato", plano["formato"]),
         "legenda_ativa": c.get("legenda_ativa", leg["ativa"]),
         "estilo": c.get("estilo", leg["estilo"]),
@@ -225,7 +227,7 @@ def _musica_do_plano(meta: dict, clip: dict) -> str | None:
 
 
 def _efeitos_sonoros(semente: str, titulo: bool, zoom: list, picos: list[float], duracao: float,
-                     transicao: float | None = None) -> list:
+                     transicao: float | None = None, replay: float | None = None) -> list:
     """Whoosh na entrada do título e na volta da abertura com o clímax, impacto nos picos do
     gameplay e pop nos zooms de ênfase. Espaçados (mín. 2,5 s) e no máximo 6 por clipe."""
     candidatos = []
@@ -233,14 +235,18 @@ def _efeitos_sonoros(semente: str, titulo: bool, zoom: list, picos: list[float],
         candidatos.append((0.05, "whoosh", 0.55))
     if transicao is not None:
         candidatos.append((max(0.0, transicao - 0.2), "whoosh", 0.6))
+    candidatos += [(max(0.0, t - 0.05), "grave", 0.9) for t in picos]       # o soco grave na kill
+    candidatos += [(max(0.0, t - 1.45), "riser", 0.5) for t in picos if t > 2]  # a tensão subindo até ela
     candidatos += [(max(0.0, t - 0.05), "impacto", 0.8) for t in picos]
+    if replay is not None:
+        candidatos.append((max(0.0, replay - 0.25), "whoosh", 0.65))
     candidatos += [(a, "pop", 0.45) for a, _ in zoom]
-    prioridade = {"impacto": 0, "whoosh": 1, "pop": 2}
+    prioridade = {"grave": 0, "impacto": 1, "riser": 2, "whoosh": 3, "pop": 4}
     escolhidos = []
     for t, tipo, vol in sorted(candidatos, key=lambda e: prioridade[e[1]]):
         # 2,5 s entre efeitos do mesmo tipo, 0,8 s entre tipos diferentes (whoosh + impacto combinam)
         longe = all(abs(t - e[0]) >= (2.5 if e[1] == tipo else 0.8) for e in escolhidos)
-        if t < duracao - 0.3 and longe and len(escolhidos) < 6:
+        if t < duracao - 0.3 and longe and len(escolhidos) < 7:
             escolhidos.append((t, tipo, vol))
     resultado = []
     for k, (t, tipo, vol) in enumerate(sorted(escolhidos)):
@@ -321,6 +327,45 @@ def _cortes_na_batida(trechos: list[tuple[float, float]], inicio_saida: float, m
             novos[k][1] = round(nb, 3)
         t += novos[k][1] - a
     return [(a, b) for a, b in novos]
+
+
+# Altura da legenda (centro, fração da tela) por enquadramento. Rosto e recorte central: a do estilo.
+POSICAO_POR_LAYOUT = {
+    "split": 0.57,    # gameplay em cima (até 60%) e facecam embaixo: na divisa, sem cobrir rosto nem mira
+    "dupla": 0.50,    # duas pessoas uma sobre a outra: entre as duas
+    "jogo": 0.885,    # janela do jogo vai de 13% a 84%: embaixo dela, longe da mira e do HUD
+    "inteiro": 0.74,  # vídeo inteiro no meio, fundo desfocado: logo abaixo do vídeo
+}
+
+
+def _layout_previsto(opc, analise) -> str:
+    """O mesmo layout que o render vai usar (inclusive as trocas que ele faz quando falta rosto/facecam)."""
+    layout = rq.escolher_layout(opc, analise)
+    if layout == "split" and not rq._facecam(analise) and not opc.video_apoio:
+        return "jogo"
+    if layout == "dupla" and len(analise.trilhas) < 2:
+        return "rosto"
+    return layout
+
+
+def _posicao_legenda(layout: str, est: dict) -> float:
+    return POSICAO_POR_LAYOUT.get(layout, est.get("posicao_y", 0.68))
+
+
+def _trecho_replay(clip: dict, trechos: list) -> tuple[float, float] | None:
+    """O lance para repetir em câmera lenta: ~1,2 s antes do pico até ~0,8 s depois, dentro do que ficou no clipe.
+    Se o pico caiu num pedaço cortado mas colado (até 3 s) num trecho, puxa para a ponta mais próxima dele."""
+    pico = clip.get("pico")
+    if pico is None or not trechos:
+        return None
+    a, b = min(trechos, key=lambda t: 0 if t[0] <= pico <= t[1] else min(abs(pico - t[0]), abs(pico - t[1])))
+    if not (a - 3 <= pico <= b + 3):
+        return None
+    pico = min(max(pico, a), b)
+    ini, fim = max(a, pico - 1.2), min(b, pico + 0.8)
+    if fim - ini < 2.0:  # na ponta do trecho: completa para o outro lado
+        ini, fim = max(a, fim - 2.0), min(b, ini + 2.0)
+    return (round(ini, 3), round(fim, 3)) if fim - ini >= 1.2 else None
 
 
 def _escolher_abertura(meta: dict, clip: dict, trechos: list) -> tuple[float, float] | None:
@@ -410,6 +455,10 @@ def _preparar_corte(meta: dict, clip: dict, cfg: dict, palavras: list[dict], pid
         trechos = _cortes_na_batida(trechos, desloc, cfg["musica"], palavras)
     partes = ([abertura] if abertura else []) + trechos
     duracao = ef.duracao_trechos(partes)
+    replay = _trecho_replay(clip, trechos) if cfg["replay"] else None
+    inicio_replay = duracao if replay else None  # o replay entra depois do corpo, em câmera lenta (2x)
+    if replay:
+        duracao += 2 * (replay[1] - replay[0])
 
     # 2) Palavras no tempo do clipe + zoom (ênfase, pico e pulsos nos cortes secos)
     pal_clip = legendas.palavras_do_clipe(palavras, partes, clip.get("palavras_enfase"), clip.get("emojis"))
@@ -419,14 +468,17 @@ def _preparar_corte(meta: dict, clip: dict, cfg: dict, palavras: list[dict], pid
         zoom += [(max(0, t - 0.4), t + 0.9) for t in picos]
     zoom_base = _pulsos_de_zoom(partes, bool(abertura))
     titulo = clip.get("titulo") if cfg["titulo_ativo"] else None
+    if replay:
+        zoom.append((inicio_replay, duracao))  # aproxima durante o replay
     efeitos = (_efeitos_sonoros(f"{pid}/{cid}", bool(titulo), legendas.momentos_de_zoom(pal_clip), picos, duracao,
-                                transicao=desloc if abertura else None)
+                                transicao=desloc if abertura else None, replay=inicio_replay)
                if cfg["efeitos"] else [])
 
-    assinatura = repr((partes, cfg["normalizar"], cfg["musica"], efeitos, cfg["limpar_voz"]))
+    assinatura = repr((partes, cfg["normalizar"], cfg["musica"], efeitos, cfg["limpar_voz"], replay, cfg["loop"]))
     return {"trechos": trechos, "abertura": abertura, "partes": partes, "duracao": duracao, "pal_clip": pal_clip,
             "zoom": zoom, "zoom_base": zoom_base, "titulo": titulo, "efeitos": efeitos, "assinatura": assinatura,
-            "cortes": direcao.cortes_grandes(partes, bool(abertura)), "impactos": picos if meta["modo"] == "gameplay" else []}
+            "cortes": direcao.cortes_grandes(partes, bool(abertura)) + ([round(inicio_replay, 3)] if replay else []),
+            "impactos": picos if meta["modo"] == "gameplay" else [], "replay": replay, "inicio_replay": inicio_replay}
 
 
 def renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progresso=None, cancelado=None) -> dict:
@@ -465,6 +517,7 @@ def renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progres
     if not (corte.exists() and clip.get("corte_assinatura") == assinatura):
         ef.cortar(meta["video"], trechos, corte, normalizar=cfg["normalizar"], musica=cfg["musica"],
                   efeitos=efeitos, abertura=abertura, limpar_voz=cfg["limpar_voz"],
+                  replay=p["replay"], loop=cfg["loop"],
                   progresso=lambda p: prog(0, p), cancelado=cancelado)
 
     # 4) Estilo, título e render
@@ -482,15 +535,21 @@ def renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progres
         look=direcao.filtro_look(cfg["look"]), zoom_intensidade=direcao.ZOOMS.get(cfg["zoom_forca"], 0.12),
         transicao=cfg["transicao"], cortes=p["cortes"], impacto=cfg["impacto"], impactos=p["impactos"],
         broll=_brolls(pid, clip, cfg, p["partes"]),
-        reacoes=_reacoes(clip, cfg, p["partes"], bool(titulo), largura),
+        reacoes=_reacoes(clip, cfg, p["partes"], bool(titulo), largura)
+        + ([(round(p["inicio_replay"] + 0.1, 3), enfeites.figurinha_reacao("REPLAY", largura, 2))] if p["replay"] else []),
     )
+
+    # Legenda que não tampa nada: a altura depende do enquadramento (que já dá para saber agora)
+    analise_rq = rq.analisar(corte, cancelado)
+    est = {**est, "posicao_y": _posicao_legenda(_layout_previsto(opc, analise_rq), est)}
 
     info, usou_remotion = None, False
     if cfg["estilo"] == "animada" and (cfg["legenda_ativa"] or titulo):
         try:
             base = tmp / f"{cid}_base.mp4"
             opc_base = rq.OpcoesRender(**{**opc.__dict__, "barra_progresso": None})
-            info = rq.renderizar(corte, base, opc_base, progresso=lambda p: prog(1, p * 0.4), cancelado=cancelado)
+            info = rq.renderizar(corte, base, opc_base, progresso=lambda p: prog(1, p * 0.4), cancelado=cancelado,
+                                 analise=analise_rq)
             legendas.renderizar_remotion(
                 base, saida, pal_clip if cfg["legenda_ativa"] else [], est, titulo, duracao, largura, altura,
                 barra=bool(barra.get("ativa")), progresso=lambda p: prog(1, 0.4 + 0.6 * p), cancelado=cancelado)
@@ -503,7 +562,7 @@ def renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progres
         arq_ass = tmp / f"{cid}.ass"
         legendas.gerar_ass(pal_clip, est, arq_ass, largura, altura, duracao, titulo, cfg["legenda_ativa"])
         opc.arquivo_ass = os.path.relpath(arq_ass, config.DADOS).replace("\\", "/")
-        info = rq.renderizar(corte, saida, opc, progresso=lambda p: prog(1, p), cancelado=cancelado)
+        info = rq.renderizar(corte, saida, opc, progresso=lambda p: prog(1, p), cancelado=cancelado, analise=analise_rq)
 
     thumb = pasta / "thumbs" / f"{cid}.jpg"
     ef.extrair_frame(saida, min(1.2, duracao / 2), thumb, largura=540)
@@ -1132,6 +1191,7 @@ def _cortar_so(pid, cid, transcricao, progresso, cancelado):
         return
     ef.cortar(meta["video"], p["trechos"], corte, normalizar=cfg["normalizar"], musica=cfg["musica"],
               efeitos=p["efeitos"], abertura=p["abertura"], limpar_voz=cfg["limpar_voz"],
+              replay=p["replay"], loop=cfg["loop"],
               progresso=progresso, cancelado=cancelado)
     projetos.atualizar(pid, lambda m: projetos.clip(m, cid).update(corte_assinatura=p["assinatura"], status="cortado"))
 

@@ -48,25 +48,56 @@ def desenhar() -> Image.Image:
     return img
 
 
+def desenho_pequeno(fonte: Path) -> Image.Image:
+    """Versão para 16-64 px (barra de tarefas, bandeja): sem o "EDIT", que vira borrão nesses tamanhos,
+    com o desenho ocupando quase o quadrado todo, traço um pouco mais grosso e sem o contorno fino."""
+    tinta = ImageChops.invert(Image.open(fonte).convert("L"))      # preto da arte -> 255
+    tinta = tinta.crop(tinta.point(lambda v: 255 if v > 60 else 0).getbbox())
+    lado = int(N * 0.90)
+    escala = lado / max(tinta.size)
+    tinta = tinta.resize((round(tinta.width * escala), round(tinta.height * escala)), Image.LANCZOS)
+    tinta = tinta.filter(ImageFilter.MaxFilter(9))                 # engrossa o traço uns 4 px em 1024
+    camada = Image.new("L", (N, N), 0)
+    camada.paste(tinta, ((N - tinta.width) // 2, (N - tinta.height) // 2))
+
+    m4 = Image.new("L", (N * 4, N * 4), 0)
+    ImageDraw.Draw(m4).rounded_rectangle((0, 0, N * 4 - 1, N * 4 - 1), radius=int(N * 4 * 0.22), fill=255)
+    img = Image.new("RGBA", (N, N), (255, 255, 255, 255))
+    img = Image.composite(Image.new("RGBA", (N, N), (10, 10, 10, 255)), img, camada)
+    img.putalpha(m4.resize((N, N), Image.LANCZOS))
+    return img
+
+
 def reduzir(img: Image.Image, lado: int) -> Image.Image:
     menor = img.resize((lado, lado), Image.LANCZOS)
-    if lado <= 32:  # em tamanho de ícone, um pouco de nitidez evita o aspecto "borrado"
-        menor = menor.filter(ImageFilter.UnsharpMask(radius=0.6, percent=60, threshold=0))
+    if lado <= 48:  # em tamanho de ícone, um pouco de nitidez evita o aspecto "borrado"
+        menor = menor.filter(ImageFilter.UnsharpMask(radius=0.6, percent=80, threshold=0))
     return menor
 
 
 def main():
-    # Gadosso Edit: o "g" da marca Gadosso (app/icone_marca.png, 512 px); sem ele, o desenho antigo do play
+    # Gadosso Edit: o "g" da marca Gadosso (app/icone_marca.png); sem ele, o desenho antigo do play.
+    # Até 64 px entra a versão sem o "EDIT" (app/icone_fonte_pequeno.png), que fica legível na barra de tarefas.
     marca = RAIZ / "app" / "icone_marca.png"
     mestre = Image.open(marca).convert("RGBA") if marca.exists() else desenhar()
+    fonte_pequena = RAIZ / "app" / "icone_fonte_pequeno.png"
+    pequeno = desenho_pequeno(fonte_pequena) if fonte_pequena.exists() else mestre
+
+    def icone(lado: int) -> Image.Image:
+        return reduzir(pequeno if lado <= 64 else mestre, lado)
+
     tamanhos = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
-    imagens = [reduzir(mestre, t) for t in tamanhos]
+    imagens = [icone(t) for t in tamanhos]
     imagens[-1].save(RAIZ / "app" / "icone.ico", format="ICO", sizes=[(t, t) for t in tamanhos],
                      append_images=imagens[:-1])
-    reduzir(mestre, 64).save(RAIZ / "app" / "icone_bandeja.png")
+    icone(64).save(RAIZ / "app" / "icone_bandeja.png")
     publico = RAIZ / "frontend" / "public"
-    for t in (16, 32, 48, 180, 192, 512):
-        reduzir(mestre, t).save(publico / f"icone-{t}.png")
+    for t in (16, 32, 48, 64, 96, 180, 192, 512):
+        icone(t).save(publico / f"icone-{t}.png")
+    # favicon.ico com vários tamanhos: o Windows pega o certo para a barra de tarefas em vez de esticar o de 16/32
+    fav = [16, 20, 24, 32, 40, 48, 64]
+    icone(64).save(publico / "favicon.ico", format="ICO", sizes=[(t, t) for t in fav],
+                   append_images=[icone(t) for t in fav[:-1]])
     mestre.save(RAIZ / "app" / "icone_1024.png")
     print("ícones gerados")
 

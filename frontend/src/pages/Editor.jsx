@@ -8,7 +8,7 @@ import { api, CLIMAS, formatarTempoPreciso } from "../api";
 import ScoreBadge from "../components/ScoreBadge";
 import { Alternador, Aviso, Botao, EstadoErro, Esqueleto, Segmentado, usePolling, useAvisar } from "../components/ui";
 
-const CHAVES = ["look", "transicao", "zoom_forca", "impacto", "broll", "reacoes", "idioma_legenda", "formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom", "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura", "limpar_voz"];
+const CHAVES = ["look", "transicao", "zoom_forca", "impacto", "broll", "reacoes", "idioma_legenda", "replay", "loop", "formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom", "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura", "limpar_voz"];
 const CORES_RAPIDAS = ["#FFE600", "#22FF6B", "#3B82F6", "#FF4FD8", "#FF8A00", "#FFFFFF"];
 const LAYOUTS = [
   { id: "auto", rotulo: "Automático", texto: "Escolhe conforme o vídeo e os rostos encontrados" },
@@ -396,6 +396,10 @@ export default function Editor() {
                   </div>
                 )}
                 <Alternador ativo={!!cfg.zoom} aoMudar={(v) => mudarConfig("zoom", v)} rotulo="Zoom automático" descricao="Aproxima suavemente nas palavras de ênfase e nos picos (gameplay)" />
+                {clip.pico != null && (
+                  <Alternador ativo={!!cfg.replay} aoMudar={(v) => mudarConfig("replay", v)} rotulo="Replay em câmera lenta" descricao="O lance repete no fim, a meia velocidade" />
+                )}
+                <Alternador ativo={!!cfg.loop} aoMudar={(v) => mudarConfig("loop", v)} rotulo="Final em loop" descricao="Sem fade no fim: emenda no começo quando repete" />
                 {clip.reacoes?.length > 0 && (
                   <Alternador
                     ativo={!!cfg.reacoes}

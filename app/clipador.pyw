@@ -187,6 +187,8 @@ def main():
 
     import pystray
     from PIL import Image
+    sys.path.insert(0, str(Path(__file__).parent))
+    import icone_janela
     icone = pystray.Icon("Gadosso Edit", Image.open(Path(__file__).with_name("icone_bandeja.png")), "Gadosso Edit (ligando...)",
                          menu=pystray.Menu(pystray.MenuItem("Abrir o Gadosso Edit", abrir_janela, default=True),
                                            pystray.MenuItem("Atualizar o Gadosso Edit", atualizar,
@@ -201,6 +203,7 @@ def main():
                 icone.notify(f"Não consegui ligar o servidor. Veja {DADOS / 'api_err.log'}", "Gadosso Edit")
                 return
         abrir_janela()
+        threading.Thread(target=icone_janela.vigiar, daemon=True).start()  # ícone nítido na barra de tarefas
         threading.Thread(target=vigiar, args=(icone,), daemon=True).start()
         threading.Thread(target=procurar_atualizacao, args=(icone,), daemon=True).start()
 

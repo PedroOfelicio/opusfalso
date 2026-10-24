@@ -483,3 +483,37 @@ class EnfeitesETraducao(Temporario):
         r, g, b = Image.open(quadro).convert("RGB").resize((1, 1)).getpixel((0, 0))
         self.assertGreater(r, 120)  # no meio do B-roll a tela é o vídeo vermelho
         self.assertLess(g, 80)
+
+
+# ---------------------------------------------------------------- replay, som e posição da legenda
+
+class PacoteDeEdicao(Temporario):
+    def test_trecho_do_replay_fica_dentro_do_clipe(self):
+        self.assertEqual(pipeline._trecho_replay({"pico": 20.0}, [(10.0, 30.0)]), (18.8, 20.8))
+        self.assertEqual(pipeline._trecho_replay({"pico": 10.3}, [(10.0, 30.0)]), (10.0, 12.0))  # completa para frente
+        # pico num pedaço cortado, colado no trecho: usa a ponta do trecho
+        self.assertEqual(pipeline._trecho_replay({"pico": 32.0}, [(10.0, 30.0), (40.0, 50.0)]), (28.0, 30.0))
+        self.assertIsNone(pipeline._trecho_replay({"pico": None}, [(10.0, 30.0)]))
+        self.assertIsNone(pipeline._trecho_replay({"pico": 50.0}, [(10.0, 30.0)]))
+
+    def test_riser_antes_e_grave_na_kill(self):
+        with mock.patch.object(pipeline.biblioteca, "escolher_efeito", side_effect=lambda tipo, s: f"{tipo}.wav"):
+            efeitos = pipeline._efeitos_sonoros("x", False, [], [10.0], 30.0)
+        tipos = {Path(arq).stem: t for t, arq, _ in efeitos}
+        self.assertAlmostEqual(tipos["grave"], 9.95)
+        self.assertAlmostEqual(tipos["riser"], 8.55)
+        self.assertNotIn("impacto", tipos)  # o grave ocupa o lugar do impacto
+
+    def test_legenda_por_enquadramento(self):
+        est = {"posicao_y": 0.66}
+        self.assertEqual(pipeline._posicao_legenda("split", est), 0.57)
+        self.assertEqual(pipeline._posicao_legenda("jogo", est), 0.885)
+        self.assertEqual(pipeline._posicao_legenda("rosto", est), 0.66)
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg não encontrado")
+    def test_corte_com_replay_em_camera_lenta(self):
+        video, saida = self.pasta / "v.mp4", self.pasta / "c.mp4"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=320x240:r=30:d=12", "-f", "lavfi",
+                        "-i", "sine=f=440:d=12", "-shortest", "-c:v", "libx264", "-c:a", "aac", str(video)], check=True)
+        ef.cortar(video, [(1.0, 5.0), (6.0, 9.0)], saida, normalizar=False, replay=(3.0, 4.5), loop=True)
+        self.assertAlmostEqual(ef.sondar(saida)["duracao"], 7.0 + 3.0, delta=0.15)  # 7 s + 1,5 s a meia velocidade
