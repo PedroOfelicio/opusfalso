@@ -106,6 +106,8 @@ class Progresso:
 
 
 def _claude_falhou(pid: str, erro: Exception):
+    if isinstance(erro, llm.IaDesligada):
+        return  # o usuário escolheu "Sem IA": não é falha
     _aviso(pid, f"Claude indisponível: {str(erro).rstrip('.')}. Usando o planejador local (mais simples).")
 
 
@@ -678,6 +680,11 @@ def _plano(meta: dict, pid: str) -> PlanoEdicao:
     return plano
 
 
+def _ver_imagens(opcoes: dict) -> bool:
+    """Gameplay: mandar folhas de quadros ao Claude. Sem IA não há quem olhe, então nem monta as folhas."""
+    return bool(opcoes.get("ver_imagens", True)) and not opcoes.get("sem_ia")
+
+
 MUITOS_CLIPES = 8     # acima disso, a escolha é feita por janelas do vídeo
 POR_JANELA = 6        # clipes pedidos em cada janela
 
@@ -1095,7 +1102,7 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
     prog.etapa("escolhendo")
     if meta["modo"] == "gameplay":
         cortes = _cortes_gameplay(video, transcricao, analise, plano, pid,
-                                  ver_imagens=meta["opcoes"].get("ver_imagens", True), cancelado=cancelado,
+                                  ver_imagens=_ver_imagens(meta["opcoes"]), cancelado=cancelado,
                                   progresso=prog)
     else:
         cortes = _cortes_falado(transcricao, plano, pid, progresso=prog)
@@ -1207,7 +1214,7 @@ def regenerar_clip(pid: str, cid: str, progresso=None, cancelado=None) -> dict:
     if meta["modo"] == "gameplay":
         analise = analise_audio.analisar(meta["video"])
         novos = _cortes_gameplay(meta["video"], transcricao, analise, plano, pid, excluir=ocupados, quantidade=1,
-                                 ver_imagens=meta["opcoes"].get("ver_imagens", True), cancelado=cancelado)
+                                 ver_imagens=_ver_imagens(meta["opcoes"]), cancelado=cancelado)
     else:
         novos = _cortes_falado(transcricao, plano, pid, excluir=ocupados, quantidade=1)
     if not novos:

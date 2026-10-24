@@ -2,13 +2,24 @@
 // O essencial fica à vista; o resto, em "Mais opções".
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronDown, FileVideo, Film, Gamepad2, Mic, Scissors, Smartphone, Sparkles, Trophy, Upload, X } from "lucide-react";
+import { BrainCircuit, ChevronDown, Cpu, FileVideo, Film, Gamepad2, Mic, Scissors, Smartphone, Sparkles, Trophy, Upload, X } from "lucide-react";
 import { api, CLIMAS, criarLongo, criarProjeto, formatarBytes } from "../api";
 import { Alternador, Aviso, Botao, Chip, Segmentado, useAvisar } from "../components/ui";
 
 const EXTENSOES = [".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"];
 const DURACOES = { "15-30s": [15, 30], "30-60s": [30, 60], "60-90s": [60, 90] };
 const ALVOS = [3, 5, 10, 15, 20];
+const CHAVE_IA = "gadosso.comIa"; // a última escolha (com/sem IA) fica lembrada neste PC
+
+function lerComIa() {
+  try {
+    const v = localStorage.getItem(CHAVE_IA);
+    return v === null ? null : v === "1";
+  } catch {
+    return null;
+  }
+}
+
 const IDIOMAS = { "": "Mesmo idioma do vídeo", en: "Inglês", es: "Espanhol", pt: "Português", fr: "Francês", it: "Italiano", de: "Alemão" };
 
 export default function Home() {
@@ -26,6 +37,8 @@ export default function Home() {
   const [modo, setModo] = useState("falado");
   const [instrucao, setInstrucao] = useState("");
   const [maisOpcoes, setMaisOpcoes] = useState(false);
+  const [comIa, setComIaEstado] = useState(() => lerComIa() ?? true);
+  const [temChave, setTemChave] = useState(true);
   // clipes curtos
   const [numClips, setNumClips] = useState(5);
   const [duracao, setDuracao] = useState("30-60s");
@@ -64,7 +77,21 @@ export default function Home() {
   useEffect(() => {
     api.estilos().then(setEstilos).catch(() => {});
     api.audio().then(setAudio).catch(() => {});
+    // sem chave do Claude e sem escolha lembrada: já começa no "Sem IA"
+    api.sistema().then((s) => {
+      setTemChave(!!s?.tem_chave);
+      if (!s?.tem_chave && lerComIa() === null) setComIaEstado(false);
+    }).catch(() => {});
   }, []);
+
+  const setComIa = (v) => {
+    setComIaEstado(v);
+    try {
+      localStorage.setItem(CHAVE_IA, v ? "1" : "0");
+    } catch {
+      /* sem armazenamento: vale só nesta tela */
+    }
+  };
   useEffect(() => {
     const ids = Object.keys(estilos);
     if (ids.length && !estilos[preset]) setPreset(ids[0]);
@@ -113,7 +140,8 @@ export default function Home() {
             num_clips: numClips, duracao: DURACOES[duracao], formato, preset, estilo_legenda: animada ? "animada" : "simples",
             layout, zoom, remover_silencios: silencios, titulo, abertura, limpar_voz: limparVoz,
             musica, efeitos_sonoros: efeitos, video_apoio: apoio || null, ver_imagens: verImagens,
-            diretor, broll, reacoes, idioma_legenda: idiomaLegenda, replay, loop,
+            diretor: comIa && diretor, broll: comIa && broll, reacoes: comIa && reacoes,
+            idioma_legenda: comIa ? idiomaLegenda : "", replay, loop, sem_ia: !comIa,
           },
         }, setEnviando);
         navegar(`/projetos/${p.id}`);
@@ -122,8 +150,8 @@ export default function Home() {
           ...base,
           opcoes: {
             modo_longo: modoLongo, alvo_min: alvo, abertura, zoom, legenda: legendaLonga, preset, efeitos, musica,
-            ver_imagens: verImagens, cortar_parado: cortarParado, remover_erros: removerErros, diretor, broll,
-            ritmo, limpar_voz: limparVoz,
+            ver_imagens: comIa && verImagens, cortar_parado: cortarParado, remover_erros: removerErros,
+            diretor: comIa && diretor, broll: comIa && broll, ritmo, limpar_voz: limparVoz, sem_ia: !comIa,
           },
         }, setEnviando);
         navegar(`/longos/${p.id}`);
@@ -132,7 +160,7 @@ export default function Home() {
       avisar(e.message, "erro");
       setEnviando(null);
     }
-  }, [pronto, enviando, arquivo, caminho, instrucao, modo, tipo, numClips, duracao, formato, preset, animada, layout, zoom, silencios, titulo, abertura, limparVoz, musica, efeitos, apoio, verImagens, diretor, broll, reacoes, idiomaLegenda, replay, loop, modoLongo, alvo, legendaLonga, cortarParado, removerErros, ritmo, navegar, avisar]);
+  }, [pronto, enviando, arquivo, caminho, instrucao, modo, tipo, numClips, duracao, formato, preset, animada, layout, zoom, silencios, titulo, abertura, limparVoz, musica, efeitos, apoio, verImagens, diretor, broll, reacoes, idiomaLegenda, replay, loop, modoLongo, alvo, legendaLonga, cortarParado, removerErros, ritmo, comIa, navegar, avisar]);
 
   // Ctrl+Enter = começar
   useEffect(() => {
@@ -151,7 +179,7 @@ export default function Home() {
   return (
     <div className="max-w-3xl mx-auto px-6 py-10 lg:py-14">
       <div className="text-center mb-8 animate-surgir">
-        <p className="rotulo-mono text-black/45">Edição com IA · roda no seu computador</p>
+        <p className="rotulo-mono text-black/45">Edição com ou sem IA · roda no seu computador</p>
         <h1 className="text-4xl lg:text-5xl font-light tracking-[-0.03em] mt-3">O que vamos editar hoje?</h1>
       </div>
 
@@ -289,7 +317,9 @@ export default function Home() {
             value={instrucao}
             onChange={(e) => setInstrucao(e.target.value)}
             rows={2}
-            placeholder={tipo === "curto" ? "Ex.: só as kills de faca, legenda amarela, sem música" : "Ex.: tira a parte do patrocínio e a conversa do final"}
+            placeholder={!comIa
+              ? "Sem IA, só comandos simples. Ex.: sem música, legenda amarela, clipes de 30 a 45 segundos"
+              : tipo === "curto" ? "Ex.: só as kills de faca, legenda amarela, sem música" : "Ex.: tira a parte do patrocínio e a conversa do final"}
             className="campo mt-2 resize-none"
           />
         </div>
@@ -311,12 +341,12 @@ export default function Home() {
                     <Chip ativo={animada} onClick={() => setAnimada(!animada)}>Animada</Chip>
                   </div>
                 </div>
-                <div>
+                {comIa && <div>
                   <label className="rotulo">Idioma da legenda</label>
                   <select value={idiomaLegenda} onChange={(e) => setIdiomaLegenda(e.target.value)} className="campo mt-2 cursor-pointer">
                     {Object.entries(IDIOMAS).map(([k, r]) => <option key={k} value={k}>{r}</option>)}
                   </select>
-                </div>
+                </div>}
                 <div>
                   <label className="rotulo">Formato</label>
                   <select value={formato} onChange={(e) => setFormato(e.target.value)} className="campo mt-2 cursor-pointer">
@@ -359,18 +389,18 @@ export default function Home() {
               )}
             </div>
 
-            <Alternador ativo={diretor} aoMudar={setDiretor} rotulo="Diretor de arte (IA)" descricao="Cor, transições, zoom e efeitos escolhidos pelo clima de cada trecho" />
+            {comIa && <Alternador ativo={diretor} aoMudar={setDiretor} rotulo="Diretor de arte (IA)" descricao="Cor, transições, zoom e efeitos escolhidos pelo clima de cada trecho" />}
             <Alternador ativo={efeitos} aoMudar={setEfeitos} rotulo="Efeitos sonoros" descricao="Whoosh, impacto e pop nos momentos certos" />
             <Alternador ativo={zoom} aoMudar={setZoom} rotulo="Zoom" descricao="Nas ênfases e para esconder os cortes secos" />
             <Alternador ativo={abertura} aoMudar={setAbertura} rotulo="Abrir com o melhor momento" descricao="Teaser no começo, para segurar quem chegou" />
             <Alternador ativo={limparVoz ?? modo === "falado"} aoMudar={setLimparVoz} rotulo="Melhorar a voz" descricao="Tira ruído de fundo e zumbido" />
-            {modo === "falado" && (
+            {comIa && modo === "falado" && (
               <Alternador ativo={broll} aoMudar={setBroll} rotulo="B-roll" descricao="Vídeos de apoio quando a fala cita algo concreto (chave do Pixabay)" />
             )}
             {tipo === "curto" && (
               <>
                 <Alternador ativo={titulo} aoMudar={setTitulo} rotulo="Título gancho" descricao="Nos primeiros segundos do clipe" />
-                <Alternador ativo={reacoes} aoMudar={setReacoes} rotulo="Textos de reação" descricao="“ESPERA...”, “KKKK” no susto e na virada" />
+                {comIa && <Alternador ativo={reacoes} aoMudar={setReacoes} rotulo="Textos de reação" descricao="“ESPERA...”, “KKKK” no susto e na virada" />}
                 <Alternador ativo={silencios} aoMudar={setSilencios} rotulo="Cortar silêncios" descricao="Pausas longas e “hum”, “é”, “tipo”" />
                 <Alternador ativo={loop} aoMudar={setLoop} rotulo="Final em loop" descricao="Termina sem fade, emendando no começo quando o vídeo repete" />
                 {modo === "gameplay" && (
@@ -386,7 +416,7 @@ export default function Home() {
             )}
             {modo === "gameplay" && (
               <>
-                <Alternador ativo={verImagens} aoMudar={setVerImagens} rotulo="Claude vê a tela do jogo" descricao="Descarta menus, loading e tempo parado" />
+                {comIa && <Alternador ativo={verImagens} aoMudar={setVerImagens} rotulo="Claude vê a tela do jogo" descricao="Descarta menus, loading e tempo parado" />}
                 {tipo === "longo" && (
                   <Alternador ativo={cortarParado} aoMudar={setCortarParado} rotulo="Cortar tempo parado" descricao="Andanças longas sem nada acontecendo" />
                 )}
@@ -402,7 +432,51 @@ export default function Home() {
         )}
       </div>
 
-      {modo === "gameplay" && !verImagens && tipo === "longo" && modoLongo === "enxugar" && (
+      {/* 3. Com ou sem IA */}
+      <div className="cartao p-5 mt-4">
+        <div className="rotulo mb-3">3 · Quem escolhe os momentos</div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {[
+            {
+              id: true, icone: BrainCircuit, titulo: "Com IA", selo: "~US$ 0,01 a 0,05",
+              texto: "O Claude assiste, escolhe os melhores momentos e escreve títulos, textos do post e a direção de arte.",
+            },
+            {
+              id: false, icone: Cpu, titulo: "Sem IA", selo: "grátis",
+              texto: modo === "gameplay"
+                ? "Escolhe pelos picos de áudio (tiros, gritos, explosões). Não usa a API: custo zero."
+                : "Escolhe pelas frases com mais gancho e impacto. Não usa a API: custo zero.",
+            },
+          ].map(({ id, icone: Icone, titulo: t, selo, texto }) => (
+            <button
+              key={String(id)}
+              onClick={() => setComIa(id)}
+              className={`text-left rounded-2xl border p-4 transition-colors cursor-pointer ${comIa === id ? "border-black bg-black/[0.03]" : "border-black/10 hover:border-black/25"}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`size-10 rounded-xl flex items-center justify-center ${comIa === id ? "gradiente" : "bg-card-2 text-texto"}`}>
+                  <Icone className="size-5" />
+                </div>
+                <div className="font-medium text-[17px]">{t}</div>
+                <span className="rotulo-mono ml-auto rounded-full border border-black/10 px-2.5 py-1 text-black/55">{selo}</span>
+              </div>
+              <p className="text-sm text-suave mt-3">{texto}</p>
+            </button>
+          ))}
+        </div>
+        {comIa && !temChave && (
+          <div className="mt-3">
+            <Aviso tipo="alerta">Sem chave do Claude configurada: a edição vai sair no modo sem IA. Configure a chave em <Link to="/configuracoes" className="underline">Configurações</Link>.</Aviso>
+          </div>
+        )}
+        {!comIa && (
+          <p className="text-xs text-apagado mt-3">
+            Legenda, cortes, zoom, música, efeitos{modo === "gameplay" ? ", replay" : ""} e loop continuam iguais. Ficam de fora só o que depende da IA: direção de arte, textos de reação, B-roll, tradução da legenda e títulos criativos.
+          </p>
+        )}
+      </div>
+
+      {modo === "gameplay" && (!verImagens || !comIa) && tipo === "longo" && modoLongo === "enxugar" && (
         <div className="mt-4">
           <Aviso tipo="alerta">Sem a tela, o tempo morto é cortado só pelo áudio, o que quase não tira nada em jogo com som constante.</Aviso>
         </div>
@@ -412,7 +486,7 @@ export default function Home() {
         <Botao variante="primario" tamanho="lg" icone={Sparkles} onClick={enviar} disabled={!pronto} carregando={enviando !== null} className="w-full sm:w-auto sm:min-w-72">
           {enviando !== null
             ? enviando < 1 ? `Enviando ${Math.round(enviando * 100)}%` : "Criando projeto…"
-            : tipo === "curto" ? `Gerar ${numClips} clipe${numClips > 1 ? "s" : ""}` : "Editar o vídeo"}
+            : (tipo === "curto" ? `Gerar ${numClips} clipe${numClips > 1 ? "s" : ""}` : "Editar o vídeo") + (comIa ? "" : " · grátis")}
         </Botao>
         <span className="rotulo-mono text-black/35">Ctrl + Enter</span>
       </div>

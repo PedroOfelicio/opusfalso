@@ -34,6 +34,17 @@ class ErroClaude(RuntimeError):
     pass
 
 
+class IaDesligada(ErroClaude):
+    """O projeto foi criado no modo "Sem IA": nenhuma chamada ao Claude (custo zero); vale o planejador local."""
+
+
+def ia_desligada(projeto_id) -> bool:
+    if not projeto_id:
+        return False
+    meta = config.ler_json(config.PASTA_PROJETOS / projeto_id / "meta.json", {}) or {}
+    return bool((meta.get("opcoes") or {}).get("sem_ia"))
+
+
 # Última falha da API (mostrada na interface); some quando uma chamada funciona
 estado = {"ultimo_erro": None}
 
@@ -70,6 +81,8 @@ def _chamar_json(sistema: str, conteudo, modelo_resposta: type[BaseModel], proje
                  motivo: str = "", max_tokens: int = 8000, rapido: bool = False) -> BaseModel:
     """Chama o Claude pedindo APENAS JSON, valida com pydantic e tenta de novo 1x se vier inválido.
     rapido=True usa o modelo da revisão fina (Configurações > modelo_rapido; vazio = o principal)."""
+    if ia_desligada(projeto_id):
+        raise IaDesligada("IA desligada neste projeto")
     try:
         resultado = _chamar_json_sem_estado(sistema, conteudo, modelo_resposta, projeto_id, motivo, max_tokens, rapido)
         estado["ultimo_erro"] = None

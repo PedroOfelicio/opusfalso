@@ -79,6 +79,8 @@ PADROES = {
 
 def _opcoes(meta: dict) -> dict:
     opc = {**PADROES, **(meta.get("opcoes") or {})}
+    if opc.get("sem_ia"):  # sem IA ninguém olha as imagens nem dirige a arte: nem prepara isso
+        opc.update(ver_imagens=False, diretor=False)
     if opc["limpar_voz"] is None:
         opc["limpar_voz"] = meta["modo"] == "falado"
     if opc["ritmo"] not in RITMOS:

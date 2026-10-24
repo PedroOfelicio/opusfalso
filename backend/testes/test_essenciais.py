@@ -517,3 +517,27 @@ class PacoteDeEdicao(Temporario):
                         "-i", "sine=f=440:d=12", "-shortest", "-c:v", "libx264", "-c:a", "aac", str(video)], check=True)
         ef.cortar(video, [(1.0, 5.0), (6.0, 9.0)], saida, normalizar=False, replay=(3.0, 4.5), loop=True)
         self.assertAlmostEqual(ef.sondar(saida)["duracao"], 7.0 + 3.0, delta=0.15)  # 7 s + 1,5 s a meia velocidade
+
+
+# ---------------------------------------------------------------- modo sem IA
+
+class SemIA(Temporario):
+    def _projeto(self, opcoes: dict) -> str:
+        (self.pasta / "p1").mkdir()
+        (self.pasta / "p1" / "meta.json").write_text(json.dumps({"opcoes": opcoes}), encoding="utf-8")
+        return "p1"
+
+    def test_projeto_sem_ia_nunca_chama_a_api(self):
+        with mock.patch.object(config, "PASTA_PROJETOS", self.pasta), \
+                mock.patch.object(llm, "_cliente", side_effect=AssertionError("chamou a API")):
+            pid = self._projeto({"sem_ia": True})
+            with self.assertRaises(llm.IaDesligada):
+                llm._chamar_json("s", "c", Correcoes, pid, "teste")
+
+    def test_sem_ia_nao_vira_aviso_de_falha_nem_monta_folhas(self):
+        with mock.patch.object(pipeline, "_aviso") as aviso:
+            pipeline._claude_falhou("p1", llm.IaDesligada("IA desligada neste projeto"))
+        aviso.assert_not_called()
+        self.assertFalse(pipeline._ver_imagens({"sem_ia": True, "ver_imagens": True}))
+        self.assertTrue(pipeline._ver_imagens({}))
+        self.assertFalse(longo._opcoes({"modo": "gameplay", "opcoes": {"sem_ia": True}})["ver_imagens"])
