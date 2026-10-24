@@ -45,6 +45,8 @@ export const api = {
   sistema: () => req("/api/sistema"),
   config: () => req("/api/config"),
   salvarConfig: (dados) => req("/api/config", json("PUT", dados)),
+  testarChave: () => req("/api/config/testar", { method: "POST" }),
+  diagnostico: () => req("/api/diagnostico"),
   custos: () => req("/api/custos"),
   zerarCustos: () => req("/api/custos", { method: "DELETE" }),
 

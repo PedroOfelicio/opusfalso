@@ -122,6 +122,21 @@ export default function Configuracoes() {
                 ? "Chave salva localmente (mascarada). Digite outra para trocar."
                 : "Nenhuma chave configurada: o planejador local será usado."}
           </p>
+          <Botao
+            className="mt-2"
+            tamanho="sm"
+            variante="fantasma"
+            onClick={async () => {
+              try {
+                const r = await api.testarChave();
+                avisar(r.mensagem, r.ok ? undefined : "erro");
+              } catch (e) {
+                avisar(e.message, "erro");
+              }
+            }}
+          >
+            Testar a chave
+          </Botao>
         </div>
         <div>
           <label className="rotulo">ID do workspace (opcional)</label>
@@ -185,6 +200,24 @@ export default function Configuracoes() {
         <div className="flex flex-wrap gap-2 text-xs">
           <span className={`px-2.5 py-1 rounded-full border ${sistema?.cuda ? "border-verde/30 text-verde" : "border-borda text-suave"}`}>CUDA {sistema?.cuda ? "ativo" : "indisponível"}</span>
           <span className={`px-2.5 py-1 rounded-full border ${sistema?.remotion ? "border-verde/30 text-verde" : "border-amarelo/30 text-amarelo"}`}>Remotion {sistema?.remotion ? "instalado" : "não instalado"}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Botao
+            tamanho="sm"
+            icone={Copy}
+            onClick={async () => {
+              try {
+                const { texto } = await api.diagnostico();
+                await navigator.clipboard.writeText(texto);
+                avisar("Diagnóstico copiado: cole numa mensagem para quem te ajuda");
+              } catch (e) {
+                avisar(e.message, "erro");
+              }
+            }}
+          >
+            Copiar diagnóstico
+          </Botao>
+          <span className="text-xs text-apagado">Se algo der errado: versões, placa de vídeo e o fim do log de erros, sem as suas chaves.</span>
         </div>
       </Secao>
 

@@ -210,6 +210,68 @@ class ConfigEntrada(BaseModel):
     idioma: str | None = None
 
 
+@app.post("/api/config/testar")
+def testar_chave():
+    """Testa a chave do Claude com um pedido mínimo (~US$ 0,0001) e diz o que está errado, se estiver."""
+    try:
+        cliente = llm._cliente()
+        modelo = config.carregar()["modelo"]
+        cliente.messages.create(model=modelo, max_tokens=5, messages=[{"role": "user", "content": "Responda: ok"}])
+        return {"ok": True, "mensagem": f"Chave funcionando ({modelo})."}
+    except llm.ErroClaude as e:
+        return {"ok": False, "mensagem": str(e)}
+    except Exception as e:  # erros da API: chave inválida, sem créditos, workspace...
+        texto = str(e)
+        if "credit balance" in texto:
+            texto = "A conta da API está sem créditos: adicione em console.anthropic.com (Plans & Billing)."
+        elif "authentication" in texto.lower() or "401" in texto:
+            texto = "Chave inválida: confira se copiou inteira (começa com sk-ant-)."
+        elif "workspace" in texto:
+            texto = "A chave precisa do ID do workspace: preencha o campo logo abaixo da chave."
+        return {"ok": False, "mensagem": texto[:300]}
+
+
+@app.get("/api/diagnostico")
+def diagnostico():
+    """Texto para o usuário copiar e mandar quando algo falhar: versões, GPU, disco, configuração SEM as
+    chaves e o fim do log de erros."""
+    import platform
+    import sys
+
+    def versao(cmd):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            return (r.stdout or r.stderr).strip().splitlines()[0][:100]
+        except Exception as e:
+            return f"não encontrado ({type(e).__name__})"
+    raiz = Path(__file__).resolve().parent.parent
+    try:
+        app_versao = (raiz / "versao.txt").read_text(encoding="utf-8").strip()
+    except OSError:
+        app_versao = "instalação de desenvolvimento"
+    cfg = {k: v for k, v in config.carregar().items() if "key" not in k}
+    try:
+        log = (config.DADOS / "api_err.log").read_text(encoding="utf-8", errors="replace").splitlines()[-80:]
+    except OSError:
+        log = ["(sem log)"]
+    linhas = [
+        "=== Diagnóstico do Clipador ===",
+        f"Versão do app: {app_versao}",
+        f"Windows: {platform.platform()}",
+        f"Python: {sys.version.split()[0]}",
+        f"FFmpeg: {versao(['ffmpeg', '-version'])}",
+        f"Node: {versao(['node', '--version'])}",
+        f"GPU: {_nome_gpu() or 'nenhuma NVIDIA'} | CUDA no Whisper: {tr.gpu_disponivel()}",
+        f"Legenda animada (Remotion): {legendas.remotion_disponivel()}",
+        f"Disco livre: {armazenamento.livre() / armazenamento.GB:.1f} GB | Dados em {config.DADOS}",
+        f"Chave do Claude: {'configurada' if config.api_key() else 'FALTANDO'} | último erro: {llm.estado['ultimo_erro']}",
+        f"Configuração: {json.dumps(cfg, ensure_ascii=False)}",
+        "", "=== Fim do log de erros ===", *log,
+    ]
+    return {"texto": "\n".join(linhas)}
+
+
 @app.put("/api/config")
 def salvar_config(dados: ConfigEntrada):
     novos = {k: v for k, v in dados.model_dump().items() if v is not None}

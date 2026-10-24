@@ -100,6 +100,52 @@ def sair(icone, *_):
     icone.stop()
 
 
+def versao_local() -> dict | None:
+    """versao.txt é escrito pelo instalador (repo, ramo, sha). Sem ele (instalação de desenvolvimento), não
+    procura atualização."""
+    try:
+        return json.loads((RAIZ / "versao.txt").read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None
+
+
+nova_versao = {"disponivel": False}
+
+
+def procurar_atualizacao(icone) -> None:
+    v = versao_local()
+    if not v or not v.get("sha") or v["sha"] == "desconhecida":
+        return
+    try:
+        req = urllib.request.Request(f"https://api.github.com/repos/{v['repo']}/commits/{v.get('ramo', 'main')}",
+                                     headers={"User-Agent": "Clipador"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            remoto = json.loads(r.read())
+    except Exception:
+        return  # sem internet: tenta na próxima abertura
+    if remoto.get("sha") and remoto["sha"] != v["sha"]:
+        nova_versao["disponivel"] = True
+        icone.update_menu()
+        mensagem = (remoto.get("commit", {}).get("message") or "").splitlines()[0][:80]
+        icone.notify(f"Nova versão do Clipador: {mensagem}. Clique no ícone > Atualizar.", "Clipador")
+
+
+def atualizar(icone, *_):
+    """Desliga o servidor, roda o instalador em modo atualização (numa janela, para ver o andamento) e sai;
+    o instalador abre o app de novo no fim."""
+    instalador = RAIZ / "instalador" / "instalar.ps1"
+    v = versao_local() or {}
+    try:
+        pedir("/api/sistema/desligar", "POST")
+    except Exception:
+        pass
+    destino = RAIZ.parent  # %LOCALAPPDATA%\Clipador (app, venv, dados)
+    subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(instalador), "-Atualizar",
+                      "-Destino", str(destino), "-Repo", v.get("repo", "PedroOfelicio/opusfalso"),
+                      "-Ramo", v.get("ramo", "main")], creationflags=subprocess.CREATE_NEW_CONSOLE)
+    icone.stop()
+
+
 def vigiar(icone) -> None:
     """Avisa (notificação do Windows) quando um projeto termina ou dá erro, e mostra o andamento na dica do ícone."""
     anteriores: dict[str, str] = {}
@@ -137,6 +183,8 @@ def main():
     from PIL import Image
     icone = pystray.Icon("Clipador", Image.open(Path(__file__).with_name("icone_bandeja.png")), "Clipador (ligando...)",
                          menu=pystray.Menu(pystray.MenuItem("Abrir o Clipador", abrir_janela, default=True),
+                                           pystray.MenuItem("Atualizar o Clipador", atualizar,
+                                                            visible=lambda _: nova_versao["disponivel"]),
                                            pystray.MenuItem("Sair (desliga o servidor)", sair)))
 
     def iniciar(icone):
@@ -148,6 +196,7 @@ def main():
                 return
         abrir_janela()
         threading.Thread(target=vigiar, args=(icone,), daemon=True).start()
+        threading.Thread(target=procurar_atualizacao, args=(icone,), daemon=True).start()
 
     icone.run(setup=iniciar)
     trava.close()

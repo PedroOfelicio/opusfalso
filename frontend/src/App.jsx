@@ -9,6 +9,7 @@ import Estilos from "./pages/Estilos";
 import Configuracoes from "./pages/Configuracoes";
 import Longos from "./pages/Longos";
 import ProjetoLongo from "./pages/ProjetoLongo";
+import PrimeiroUso from "./components/PrimeiroUso";
 import { Compass, Sparkles } from "lucide-react";
 import { MODO_DEMO } from "./api";
 
@@ -16,6 +17,7 @@ export default function App() {
   return (
     <ProvedorAvisos>
       <div className="flex h-full">
+        <PrimeiroUso />
         <Sidebar />
         <main className="flex-1 min-w-0 overflow-y-auto">
           {MODO_DEMO && (
