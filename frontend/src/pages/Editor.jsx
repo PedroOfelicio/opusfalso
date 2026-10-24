@@ -8,7 +8,7 @@ import { api, CLIMAS, formatarTempoPreciso, MODO_DEMO } from "../api";
 import ScoreBadge from "../components/ScoreBadge";
 import { Alternador, Aviso, Botao, EstadoErro, Esqueleto, Segmentado, usePolling, useAvisar } from "../components/ui";
 
-const CHAVES = ["look", "transicao", "zoom_forca", "impacto", "formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom", "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura", "limpar_voz"];
+const CHAVES = ["look", "transicao", "zoom_forca", "impacto", "broll", "formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom", "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura", "limpar_voz"];
 const CORES_RAPIDAS = ["#FFE600", "#22FF6B", "#3B82F6", "#FF4FD8", "#FF8A00", "#FFFFFF"];
 const LAYOUTS = [
   { id: "auto", rotulo: "Automático", texto: "Escolhe conforme o vídeo e os rostos encontrados" },
@@ -384,6 +384,14 @@ export default function Editor() {
                   </div>
                 )}
                 <Alternador ativo={!!cfg.zoom} aoMudar={(v) => mudarConfig("zoom", v)} rotulo="Zoom automático" descricao="Aproxima suavemente nas palavras de ênfase e nos picos (gameplay)" />
+                {clip.broll?.length > 0 && (
+                  <Alternador
+                    ativo={!!cfg.broll}
+                    aoMudar={(v) => mudarConfig("broll", v)}
+                    rotulo="B-roll"
+                    descricao={`Vídeos de apoio: ${clip.broll.map((b) => `“${b.busca}”`).join(", ")}`}
+                  />
+                )}
                 <div className="pt-2 border-t border-borda">
                   <div className="rotulo mb-1">Direção de arte</div>
                   <p className="text-xs text-apagado mb-3">

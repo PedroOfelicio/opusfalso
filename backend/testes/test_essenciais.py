@@ -398,3 +398,35 @@ class DirecaoDeArte(unittest.TestCase):
             saida = rq._aplicar_efeito(q, tipo, 0.8, 7)
             self.assertEqual(saida.shape, q.shape)
         self.assertGreater(rq._aplicar_efeito(q, "flash", 1.0, 0).mean(), 200)
+
+
+# ---------------------------------------------------------------- B-roll
+
+class BRollDeApoio(unittest.TestCase):
+    def test_valida_e_limita_a_duracao(self):
+        c = Corte.model_validate({"inicio": 0, "fim": 40, "broll": [
+            {"inicio": 10, "fim": 18, "busca": "sports car"},   # longo demais: corta em 4 s
+            {"inicio": 20, "fim": 20.5, "busca": "beach"},      # curto demais: sai
+            {"inicio": 30, "fim": 32, "busca": ""}]})            # sem busca: sai
+        self.assertEqual([(b.inicio, b.fim, b.busca) for b in c.broll], [(10, 14, "sports car")])
+
+    def test_escolhe_arquivo_leve_e_na_orientacao(self):
+        import broll
+        video = {"video_files": [
+            {"link": "a", "width": 2160, "height": 3840}, {"link": "b", "width": 1080, "height": 1920},
+            {"link": "c", "width": 720, "height": 1280}, {"link": "d", "width": 1280, "height": 720},
+            {"link": "e", "width": 360, "height": 640}]}
+        self.assertEqual(broll.escolher_arquivo(video, "portrait")["link"], "c")
+        self.assertEqual(broll.escolher_arquivo(video, "landscape")["link"], "d")
+
+    def test_sobrepoe_com_fusao(self):
+        import numpy as np
+        import reenquadramento as rq
+        fundo = np.zeros((1920, 1080, 3), dtype=np.uint8)
+        cap = mock.Mock()
+        cap.read.return_value = (True, np.full((720, 1280, 3), 200, dtype=np.uint8))
+        abertos = {0: cap}
+        lista = [(5.0, 7.0, "x.mp4")]
+        self.assertEqual(rq._sobrepor_broll(fundo, 4.0, lista, abertos, 1080, 1920).mean(), 0)      # antes
+        self.assertAlmostEqual(rq._sobrepor_broll(fundo, 6.0, lista, abertos, 1080, 1920).mean(), 200, delta=1)
+        self.assertLess(rq._sobrepor_broll(fundo, 5.05, lista, abertos, 1080, 1920).mean(), 100)    # entrando

@@ -65,7 +65,7 @@ export default function Configuracoes() {
   const salvar = async () => {
     setSalvando(true);
     try {
-      const dados = { modelo: cfg.modelo, modelo_rapido: cfg.modelo_rapido, pasta_saida: cfg.pasta_saida, usar_gpu: cfg.usar_gpu, modelo_whisper: cfg.modelo_whisper, idioma: cfg.idioma, workspace_id: (cfg.workspace_id || "").trim() };
+      const dados = { modelo: cfg.modelo, modelo_rapido: cfg.modelo_rapido, pasta_saida: cfg.pasta_saida, usar_gpu: cfg.usar_gpu, modelo_whisper: cfg.modelo_whisper, idioma: cfg.idioma, workspace_id: (cfg.workspace_id || "").trim(), pexels_key: (cfg.pexels_key || "").trim() };
       if (novaChave.trim()) dados.api_key = novaChave.trim();
       setCfg(await api.salvarConfig(dados));
       setNovaChave("");
@@ -127,6 +127,15 @@ export default function Configuracoes() {
           <label className="rotulo">ID do workspace (opcional)</label>
           <input value={cfg.workspace_id || ""} onChange={mudar("workspace_id")} placeholder="wrkspc_…" className="campo font-mono text-[13px] mt-2" autoComplete="off" />
           <p className="text-xs text-apagado mt-2">Só preencha se a API reclamar que a chave não está vinculada a um workspace. O ID aparece em console.anthropic.com → Settings → Workspaces.</p>
+        </div>
+        <div>
+          <label className="rotulo">Chave do Pexels (B-roll)</label>
+          <input value={cfg.pexels_key || ""} onChange={mudar("pexels_key")} placeholder="cole a chave grátis do Pexels" className="campo font-mono text-[13px] mt-2" autoComplete="off" />
+          <p className="text-xs text-apagado mt-2">
+            Para os vídeos de apoio (B-roll). É grátis: crie uma conta em{" "}
+            <a href="https://www.pexels.com/api/" target="_blank" rel="noreferrer" className="text-roxo hover:underline">pexels.com/api</a>{" "}
+            e copie a chave. Os vídeos do Pexels podem ser usados em vídeo monetizado, sem dar crédito.
+          </p>
         </div>
         <div>
           <label className="rotulo">Modelo</label>

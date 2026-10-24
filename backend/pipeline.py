@@ -20,6 +20,7 @@ import analise_audio
 import armazenamento
 import biblioteca_audio as biblioteca
 import config
+import broll
 import custos
 import direcao
 import editor_ffmpeg as ef
@@ -183,6 +184,7 @@ def config_clip(meta: dict, clip: dict) -> dict:
         "transicao": c.get("transicao", d["transicao"]),
         "zoom_forca": c.get("zoom_forca", d["zoom"]),
         "impacto": c.get("impacto", d["impacto"]),
+        "broll": c.get("broll", bool(meta["opcoes"].get("broll"))),
         "formato": c.get("formato", plano["formato"]),
         "legenda_ativa": c.get("legenda_ativa", leg["ativa"]),
         "estilo": c.get("estilo", leg["estilo"]),
@@ -472,6 +474,7 @@ def renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progres
         barra_progresso={"cor": est["cor_destaque"], "altura": barra.get("altura", 10)} if barra.get("ativa") else None,
         look=direcao.filtro_look(cfg["look"]), zoom_intensidade=direcao.ZOOMS.get(cfg["zoom_forca"], 0.12),
         transicao=cfg["transicao"], cortes=p["cortes"], impacto=cfg["impacto"], impactos=p["impactos"],
+        broll=_brolls(pid, clip, cfg, p["partes"]),
     )
 
     info, usou_remotion = None, False
@@ -506,6 +509,28 @@ def renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progres
     meta = projetos.atualizar(pid, f)
     escrever_posts(meta)
     return projetos.clip(meta, cid)
+
+
+def _brolls(pid: str, clip: dict, cfg: dict, partes: list) -> list[tuple[float, float, str]]:
+    """Vídeos de apoio no tempo do clipe: (início, fim, arquivo). Busca no banco na hora (com cache)."""
+    if not cfg["broll"] or not clip.get("broll"):
+        return []
+    if not broll.chave():
+        _aviso(pid, "B-roll pedido, mas falta a chave grátis do Pexels (Configurações > B-roll).")
+        return []
+    orientacao = "landscape" if cfg["formato"] == "16:9" else "portrait"
+    saida = []
+    for b in clip["broll"]:
+        posicoes = ef.mapear_intervalo(b["inicio"], b["fim"], partes)
+        if not posicoes:
+            continue
+        a, f = posicoes[-1]  # no corpo do clipe (não no teaser da abertura)
+        if a < 2.5 or f - a < 1.0 or any(a < y and f > x for x, y, _ in saida):
+            continue
+        arquivo = broll.buscar(b["busca"], orientacao)
+        if arquivo:
+            saida.append((round(a, 3), round(f, 3), str(arquivo)))
+    return saida
 
 
 def texto_dos_posts(clips: list[dict]) -> str:
@@ -913,6 +938,7 @@ def _novo_clip(cid: str, corte: Corte) -> dict:
         "remover": corte.remover, "correcoes": [c.model_dump() for c in corte.correcoes], "gancho": corte.gancho,
         "legenda_post": corte.legenda_post, "hashtags": list(corte.hashtags),
         "direcao": direcao.valida(corte.direcao, list(llm.presets_disponiveis())),
+        "broll": [b.model_dump() for b in corte.broll],
         "config": {}, "palavras_editadas": {}, "status": "fila", "arquivo": None, "thumb": None,
         "duracao": round(corte.fim - corte.inicio, 2), "versao": 0,
     }
@@ -1028,7 +1054,7 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
 
 # Campos que definem o resultado de um clipe (decididos pelo Claude ou pelo plano local)
 CAMPOS_CLIP = ("inicio", "fim", "titulo", "remover", "correcoes", "gancho", "clima", "emojis", "palavras_enfase", "pico",
-               "direcao")
+               "direcao", "broll")
 
 
 def _reaproveitar(novo: dict, antigo: dict | None) -> bool:

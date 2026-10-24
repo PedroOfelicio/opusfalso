@@ -238,7 +238,8 @@ Responda APENAS com JSON válido, sem markdown, no formato:
              "palavras_enfase": ["..."], "emojis": [{"palavra": "...", "emoji": "🔥"}], "clima": "calma",
              "remover": [[20.1, 23.4]], "correcoes": [{"de": "palavra errada", "para": "palavra certa"}],
              "gancho": [31.2, 34.0], "legenda_post": "...", "hashtags": ["#..."],
-             "direcao": {"preset": "...", "cor": null, "look": "...", "transicao": "...", "zoom": "medio", "impacto": "nenhum"}}]}
+             "direcao": {"preset": "...", "cor": null, "look": "...", "transicao": "...", "zoom": "medio", "impacto": "nenhum"},
+             "broll": [{"inicio": 40.2, "fim": 42.8, "busca": "stack of money"}]}]}
 
 Critérios:
 - Cada clipe deve fazer sentido SOZINHO: começa numa frase que prende atenção (gancho) e termina num pensamento completo.
@@ -262,6 +263,13 @@ Critérios:
 - legenda_post: texto da descrição do post, no idioma do vídeo (1 ou 2 frases curtas, máx. 150 caracteres):
   complementa o título sem repeti-lo e termina com uma pergunta ou chamada para comentar. Sem hashtags.
 - hashtags: 3 a 5 do assunto do clipe (as mais específicas primeiro), sem genéricas como #fyp, #viral, #foryou.
+- broll: 1 ou 2 vídeos de apoio de banco de imagens por clipe, nos momentos em que a fala cita algo que dá
+  para MOSTRAR: objeto, lugar, ação, profissão, dinheiro, tecnologia ("comprei um carro", "fui pra praia",
+  "olhei no espelho", "a empresa cresceu", "fiquei doente"). Quase todo trecho de fala tem pelo menos um;
+  vazio só se o trecho for todo abstrato. Cada um fica DENTRO do clipe e cobre a tela de inicio a fim (2 a 3 s, nos tempos da
+  transcrição, enquanto a frase é dita), nunca nos 3 primeiros segundos nem no momento mais emocional, em
+  que o rosto importa. busca: 2 a 4 palavras em INGLÊS, concretas, do jeito que se busca num banco de vídeos
+  ("man looking in mirror", "startup office team", "sports car driving").
 - Ordene do melhor para o pior."""
 
 

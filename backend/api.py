@@ -168,12 +168,15 @@ def _mascarar(chave: str) -> str:
 def ler_config():
     cfg = config.carregar()
     chave_ambiente = bool(__import__("os").environ.get("ANTHROPIC_API_KEY"))
-    return {**cfg, "api_key": _mascarar(config.api_key()), "api_key_origem":
+    pexels = cfg.get("pexels_key") or ""
+    return {**cfg, "pexels_key": (pexels[:4] + "••••••••" + pexels[-4:]) if pexels else "",
+            "api_key": _mascarar(config.api_key()), "api_key_origem":
             "config" if cfg.get("api_key") else ("ambiente" if chave_ambiente else None)}
 
 
 class ConfigEntrada(BaseModel):
     api_key: str | None = None
+    pexels_key: str | None = None
     workspace_id: str | None = None
     modelo: str | None = None
     modelo_rapido: str | None = None
@@ -190,6 +193,8 @@ def salvar_config(dados: ConfigEntrada):
         novos.pop("api_key")  # veio a versão mascarada: não altera
     elif "api_key" in novos and not novos["api_key"].startswith("sk-ant-"):
         raise HTTPException(400, "Chave inválida: a chave da API da Anthropic começa com \"sk-ant-\".")
+    if "pexels_key" in novos and "••" in novos["pexels_key"]:
+        novos.pop("pexels_key")  # versão mascarada: não altera
     if "pasta_saida" in novos:
         Path(novos["pasta_saida"]).mkdir(parents=True, exist_ok=True)
     config.salvar(novos)
@@ -641,7 +646,7 @@ class EdicaoClip(BaseModel):
     palavras_editadas: dict[str, str] | None = None
 
 
-CHAVES_CONFIG = {"look", "transicao", "zoom_forca", "impacto","formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom",
+CHAVES_CONFIG = {"look", "transicao", "zoom_forca", "impacto", "broll","formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom",
                  "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura",
                  "limpar_voz"}
 

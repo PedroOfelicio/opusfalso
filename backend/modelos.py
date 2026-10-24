@@ -119,6 +119,20 @@ class PlanoEdicao(BaseModel):
         return self
 
 
+class BRoll(BaseModel):
+    """Vídeo de apoio: cobre a tela de inicio a fim (s do vídeo original), buscado no banco com `busca`."""
+    inicio: float
+    fim: float
+    busca: str = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def _duracao(self):
+        if self.fim - self.inicio < 1.0:
+            raise ValueError("b-roll curto demais")
+        self.fim = min(self.fim, self.inicio + 4.0)  # mais que 4 s some com quem está falando
+        return self
+
+
 class Emoji(BaseModel):
     palavra: str
     emoji: str
@@ -177,11 +191,17 @@ class Corte(BaseModel):
     legenda_post: str = ""     # texto para a descrição do post (TikTok/Reels/Shorts)
     hashtags: list[str] = Field(default_factory=list)
     direcao: dict = Field(default_factory=dict)  # direção de arte do clipe (validada em direcao.valida)
+    broll: list[BRoll] = Field(default_factory=list)  # vídeos de apoio (só fala)
 
     @field_validator("direcao", mode="before")
     @classmethod
     def _direcao(cls, v):
         return v if isinstance(v, dict) else {}
+
+    @field_validator("broll", mode="before")
+    @classmethod
+    def _broll(cls, v):
+        return lista_tolerante(BRoll, v)[:3]
 
     @field_validator("legenda_post", mode="before")
     @classmethod

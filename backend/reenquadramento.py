@@ -420,6 +420,7 @@ class OpcoesRender:
     cortes: list = field(default_factory=list)     # instantes dos cortes grandes (tempo do clipe)
     impacto: str = "nenhum"            # efeito nos picos de ação
     impactos: list = field(default_factory=list)   # instantes dos picos (tempo do clipe)
+    broll: list = field(default_factory=list)      # [(início, fim, arquivo)]: vídeo de apoio cobrindo a tela
 
 
 def _hex_bgr(cor: str):
@@ -491,6 +492,7 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
     barra_cor = _hex_bgr(opc.barra_progresso["cor"]) if opc.barra_progresso else None
     barra_alt = int(opc.barra_progresso.get("altura", 10)) if opc.barra_progresso else 0
     cap = cv2.VideoCapture(str(entrada))
+    brolls: dict[int, cv2.VideoCapture] = {}
     i = 0
     try:
         while i < total:
@@ -500,6 +502,8 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
             if cancelado is not None and cancelado.is_set():
                 raise Cancelado()
             quadro = _compor(frame, layout, i, LW, LH, aspecto, cx, cy, z, facecam, apoio, dupla)
+            if opc.broll:
+                quadro = _sobrepor_broll(quadro, i / FPS_SAIDA, opc.broll, brolls, LW, LH)
             if i in efeitos:
                 quadro = _aplicar_efeito(quadro, *efeitos[i], i)
             if barra_cor:
@@ -517,6 +521,8 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
         raise
     finally:
         cap.release()
+        for b in brolls.values():
+            b.release()
         if apoio is not None:
             apoio.release()
         if proc.poll() is None:
@@ -524,6 +530,25 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
     if proc.returncode != 0:
         raise RuntimeError(f"FFmpeg falhou no reenquadramento: {proc.stderr.read().decode(errors='ignore')[-600:]}")
     return {"layout": layout, "pessoas": len(analise.trilhas), "detector": analise.detector}
+
+
+def _sobrepor_broll(quadro, t: float, lista, abertos: dict, LW: int, LH: int):
+    """No intervalo de um b-roll, a tela mostra o vídeo de apoio (com 0,15 s de fusão na entrada e na saída)."""
+    for k, (a, b, arquivo) in enumerate(lista):
+        if not a <= t < b:
+            continue
+        cap = abertos.get(k)
+        if cap is None:
+            cap = abertos[k] = cv2.VideoCapture(arquivo)
+        ok, f = cap.read()
+        if not ok:  # vídeo de apoio mais curto que o intervalo: recomeça
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            ok, f = cap.read()
+        if not ok:
+            return quadro
+        alfa = max(0.0, min(1.0, (t - a) / 0.15, (b - t) / 0.15))
+        return cv2.addWeighted(quadro, 1 - alfa, _cobrir(f, LW, LH), alfa, 0)
+    return quadro
 
 
 DURACAO_EFEITO = {"flash": 0.15, "zoom_rapido": 0.3, "desfoque": 0.25, "tremor": 0.3, "glitch": 0.15}

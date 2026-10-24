@@ -42,6 +42,7 @@ PADRAO = {
     "usar_gpu": True,
     "modelo_whisper": "large-v3-turbo",
     "idioma": "",                       # vazio = detectar automaticamente
+    "pexels_key": "",                   # B-roll (pexels.com/api, grátis); vazio = PEXELS_API_KEY
 }
 
 _trava = threading.Lock()
