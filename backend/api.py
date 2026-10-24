@@ -143,6 +143,15 @@ def _resumo(meta: dict) -> dict:
 
 # ================================================================ sistema e configurações
 
+@app.post("/api/sistema/desligar")
+def desligar():
+    """Usado pelo ícone da bandeja ("Sair"): responde e desliga o servidor logo em seguida. O que estava
+    processando pode ser continuado depois, de onde parou."""
+    import os
+    threading.Timer(0.5, lambda: os._exit(0)).start()
+    return {"ok": True}
+
+
 @app.get("/api/sistema")
 def sistema():
     gpu = None
