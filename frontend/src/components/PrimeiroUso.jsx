@@ -2,7 +2,7 @@
 // pede a chave (opcional) do Pixabay para o B-roll e mostra se o PC tem GPU NVIDIA.
 import { useEffect, useState } from "react";
 import { Check, Cpu, ExternalLink, KeyRound, Sparkles, X } from "lucide-react";
-import { api, MODO_DEMO } from "../api";
+import { api } from "../api";
 import { Botao } from "./ui";
 
 export default function PrimeiroUso() {
@@ -15,7 +15,6 @@ export default function PrimeiroUso() {
   const [resultado, setResultado] = useState(null);
 
   useEffect(() => {
-    if (MODO_DEMO) return;
     api.sistema().then((s) => {
       setSistema(s);
       let pulou = false;

@@ -1,26 +1,6 @@
 // Cliente da API local (FastAPI). Em dev o Vite faz proxy de /api para a porta 8000.
 
-// Modo demonstração (build com VITE_DEMO=1, publicado na Vercel): mostra projetos reais já processados,
-// lidos de arquivos estáticos em /demo. Nada é processado: as ações respondem com um aviso.
-export const MODO_DEMO = import.meta.env.VITE_DEMO === "1";
-export const MSG_DEMO = "Isto é uma demonstração com resultados reais. No app instalado no PC, esta ação processa o vídeo de verdade.";
-
-// Mesmo nome de arquivo usado pelo script que captura a demonstração (scripts/capturar_demo.py)
-export const arquivoDemo = (caminho) => {
-  const url = new URL(caminho, window.location.origin);
-  const busca = url.search.replace(/^\?/, "").replace(/(^|&)v=\d+/g, "").replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "");
-  return `/demo${url.pathname}${busca ? `__${busca}` : ""}.json`;
-};
-
-async function reqDemo(caminho, opcoes) {
-  if ((opcoes.method || "GET").toUpperCase() !== "GET") throw new Error(MSG_DEMO);
-  const resp = await fetch(arquivoDemo(caminho));
-  if (!resp.ok) throw new Error(MSG_DEMO);
-  return resp.json();
-}
-
 async function req(caminho, opcoes = {}) {
-  if (MODO_DEMO) return reqDemo(caminho, opcoes);
   const resp = await fetch(caminho, opcoes);
   if (!resp.ok) {
     let msg = `Erro ${resp.status}`;
@@ -95,7 +75,6 @@ export const CLIMAS = { energetica: "Energética", tensa: "Tensa", calma: "Calma
 
 // Criação com upload: usa XMLHttpRequest para ter o progresso do envio
 export function criarProjeto({ arquivo, caminho, instrucao, modo, opcoes }, aoProgresso, rota = "/api/projetos") {
-  if (MODO_DEMO) return Promise.reject(new Error(MSG_DEMO));
   return new Promise((resolve, reject) => {
     const form = new FormData();
     form.append("instrucao", instrucao);

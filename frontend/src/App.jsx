@@ -9,8 +9,7 @@ import Editor from "./pages/Editor";
 import Configuracoes from "./pages/Configuracoes";
 import ProjetoLongo from "./pages/ProjetoLongo";
 import PrimeiroUso from "./components/PrimeiroUso";
-import { Compass, Sparkles } from "lucide-react";
-import { MODO_DEMO } from "./api";
+import { Compass } from "lucide-react";
 
 export default function App() {
   return (
@@ -18,14 +17,6 @@ export default function App() {
       <Fundo />
       <div className="relative z-10 flex h-full flex-col">
         <PrimeiroUso />
-        {MODO_DEMO && (
-          <div className="flex items-center justify-center gap-2 px-4 py-2 text-xs sm:text-sm bg-black text-white">
-            <Sparkles className="size-4 shrink-0" />
-            <span>
-              <strong>Demonstração</strong> com projetos reais já processados pelo Gadosso Edit. A edição roda no PC (GPU, FFmpeg e Claude); aqui você navega pelos resultados.
-            </span>
-          </div>
-        )}
         <Cabecalho />
         <main className="min-h-0 flex-1 overflow-y-auto">
           <Routes>

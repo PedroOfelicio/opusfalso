@@ -4,7 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft, AudioLines, Crop, Download, Loader2, Minus, Pause, Play, Plus, RotateCcw, Save, Subtitles, Type, Upload,
 } from "lucide-react";
-import { api, CLIMAS, formatarTempoPreciso, MODO_DEMO } from "../api";
+import { api, CLIMAS, formatarTempoPreciso } from "../api";
 import ScoreBadge from "../components/ScoreBadge";
 import { Alternador, Aviso, Botao, EstadoErro, Esqueleto, Segmentado, usePolling, useAvisar } from "../components/ui";
 
@@ -201,7 +201,7 @@ export default function Editor() {
                 <video
                   key={fonte + (clip.versao || 0)}
                   ref={video}
-                  src={fonte === "final" || MODO_DEMO ? clip.video_url : `/api/projetos/${id}/video`}
+                  src={fonte === "final" ? clip.video_url : `/api/projetos/${id}/video`}
                   className="absolute inset-0 size-full object-contain rounded-xl"
                   onClick={alternarPlay}
                   onPlay={() => setTocando(true)}
