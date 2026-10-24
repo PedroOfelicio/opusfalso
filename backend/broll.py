@@ -89,6 +89,27 @@ def escolher_pixabay(hit: dict) -> dict | None:
     return min(bons, key=lambda v: v["width"] * v["height"]) if bons else None
 
 
+_VAZIAS = {"the", "and", "with", "for", "from", "into", "of", "on", "at", "in", "a", "an", "to", "up", "out"}
+
+
+def _raiz(p: str) -> str:
+    return p[:-1] if len(p) > 4 and p.endswith("s") else p  # "graduates" ~ "graduate"
+
+
+def relevancia(busca: str, descricao: str) -> int:
+    """Quantas palavras da busca aparecem na descrição do vídeo (tags do Pixabay, endereço do Pexels)."""
+    termos = {_raiz(t) for t in re.findall(r"[a-z]+", busca.lower()) if t not in _VAZIAS and len(t) > 2}
+    achadas = {_raiz(t) for t in re.findall(r"[a-z]+", descricao.lower())}
+    return len(termos & achadas)
+
+
+def minimo_relevancia(busca: str) -> int:
+    """A busca do banco é frouxa ("doctor looking at scan" já trouxe um cachorro): exige que o vídeo tenha
+    pelo menos 2 das palavras da busca (1, se a busca só tem uma palavra que conta)."""
+    termos = [t for t in re.findall(r"[a-z]+", busca.lower()) if t not in _VAZIAS and len(t) > 2]
+    return min(2, len(termos)) or 1
+
+
 def _vertical(hit: dict) -> bool:
     v = (hit.get("videos") or {}).get("medium") or {}
     return v.get("height", 0) >= v.get("width", 1)
@@ -101,8 +122,11 @@ def _pixabay(busca: str, orientacao: str, destino: Path, chave_api: str) -> bool
         pedido = urllib.request.Request(url, headers={"User-Agent": "Clipador/1.0"})
         with urllib.request.urlopen(pedido, timeout=30) as r:
             hits = json.load(r).get("hits", [])
-        # A API de vídeos do Pixabay não filtra orientação: os da orientação pedida vêm primeiro
-        hits.sort(key=lambda h: _vertical(h) != (orientacao == "portrait"))
+        # Só os que batem com a busca; os mais relevantes primeiro e, entre eles, os da orientação pedida
+        # (a API de vídeos do Pixabay não filtra orientação)
+        minimo = minimo_relevancia(busca)
+        hits = [h for h in hits if relevancia(busca, h.get("tags", "")) >= minimo]
+        hits.sort(key=lambda h: (-relevancia(busca, h.get("tags", "")), _vertical(h) != (orientacao == "portrait")))
         for h in hits:
             if (h.get("duration") or 0) < 3:
                 continue
@@ -123,8 +147,9 @@ def _pexels(busca: str, orientacao: str, destino: Path, chave_api: str) -> bool:
                                                   "per_page": 8})
         with _pedir(url, chave_api) as r:
             videos = json.load(r).get("videos", [])
+        minimo = minimo_relevancia(busca)
         for v in sorted(videos, key=lambda v: abs((v.get("duration") or 0) - 8)):  # 5-15 s é o ideal
-            if (v.get("duration") or 0) < 3:
+            if (v.get("duration") or 0) < 3 or relevancia(busca, v.get("url", "")) < minimo:
                 continue
             arquivo = escolher_arquivo(v, orientacao)
             if not arquivo:
