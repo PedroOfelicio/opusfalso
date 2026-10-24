@@ -516,7 +516,7 @@ def _brolls(pid: str, clip: dict, cfg: dict, partes: list) -> list[tuple[float, 
     if not cfg["broll"] or not clip.get("broll"):
         return []
     if not broll.chave():
-        _aviso(pid, "B-roll pedido, mas falta a chave grátis do Pexels (Configurações > B-roll).")
+        _aviso(pid, "B-roll pedido, mas falta a chave grátis do Pixabay (Configurações > B-roll).")
         return []
     orientacao = "landscape" if cfg["formato"] == "16:9" else "portrait"
     saida = []

@@ -1,9 +1,10 @@
 """
-B-roll: vídeos de apoio de banco (Pexels: grátis, uso comercial liberado, sem dar crédito) que cobrem a tela por
+B-roll: vídeos de apoio de banco (Pixabay ou Pexels: grátis, uso comercial liberado, sem dar crédito) que cobrem a tela por
 2-3 s quando a fala cita algo concreto ("ganhei 10 mil reais" -> pilha de dinheiro). O Claude marca onde e o que
 buscar (em inglês, que o banco entende melhor); aqui só se busca, baixa (com cache) e devolve o arquivo.
 
-Precisa de uma chave grátis do Pexels (pexels.com/api) em Configurações, ou na variável PEXELS_API_KEY.
+Precisa de uma chave grátis do Pixabay (pixabay.com/api/docs, aparece logado) ou do Pexels em Configurações
+(ou nas variáveis PIXABAY_API_KEY / PEXELS_API_KEY). Com as duas, tenta o Pexels primeiro.
 """
 import json
 import logging
@@ -19,10 +20,20 @@ log = logging.getLogger("broll")
 
 PASTA = config.PASTA_CACHE / "broll"
 API = "https://api.pexels.com/videos/search"
+API_PIXABAY = "https://pixabay.com/api/videos/"
+
+
+def chave_pexels() -> str:
+    return (config.carregar().get("pexels_key") or os.environ.get("PEXELS_API_KEY", "")).strip()
+
+
+def chave_pixabay() -> str:
+    return (config.carregar().get("pixabay_key") or os.environ.get("PIXABAY_API_KEY", "")).strip()
 
 
 def chave() -> str:
-    return (config.carregar().get("pexels_key") or os.environ.get("PEXELS_API_KEY", "")).strip()
+    """Alguma fonte configurada? (para avisar o usuário quando não houver)"""
+    return chave_pexels() or chave_pixabay()
 
 
 def _nome(busca: str, orientacao: str) -> str:
@@ -53,9 +64,60 @@ def buscar(busca: str, orientacao: str = "portrait") -> Path | None:
     destino = PASTA / f"{_nome(busca, orientacao)}.mp4"
     if destino.exists():
         return destino
-    chave_api = chave()
-    if not chave_api:
-        return None
+    if chave_pexels() and _pexels(busca, orientacao, destino, chave_pexels()):
+        return destino
+    if chave_pixabay() and _pixabay(busca, orientacao, destino, chave_pixabay()):
+        return destino
+    return None
+
+
+def _baixar(url: str, destino: Path) -> None:
+    PASTA.mkdir(parents=True, exist_ok=True)
+    parcial = destino.with_suffix(".part")
+    pedido = urllib.request.Request(url, headers={"User-Agent": "Clipador/1.0"})
+    with urllib.request.urlopen(pedido, timeout=60) as r, open(parcial, "wb") as f:
+        while bloco := r.read(1 << 20):
+            f.write(bloco)
+    parcial.replace(destino)
+
+
+def escolher_pixabay(hit: dict) -> dict | None:
+    """Pixabay dá large/medium/small/tiny: fica a menor com lado menor >= 720 (sem passar de 1080)."""
+    opcoes = [v for v in (hit.get("videos") or {}).values() if v.get("url") and v.get("width") and v.get("height")]
+    bons = ([v for v in opcoes if 720 <= min(v["width"], v["height"]) <= 1080]
+            or [v for v in opcoes if min(v["width"], v["height"]) >= 540])
+    return min(bons, key=lambda v: v["width"] * v["height"]) if bons else None
+
+
+def _vertical(hit: dict) -> bool:
+    v = (hit.get("videos") or {}).get("medium") or {}
+    return v.get("height", 0) >= v.get("width", 1)
+
+
+def _pixabay(busca: str, orientacao: str, destino: Path, chave_api: str) -> bool:
+    try:
+        url = API_PIXABAY + "?" + urllib.parse.urlencode({"key": chave_api, "q": busca, "per_page": 12,
+                                                          "safesearch": "true"})
+        pedido = urllib.request.Request(url, headers={"User-Agent": "Clipador/1.0"})
+        with urllib.request.urlopen(pedido, timeout=30) as r:
+            hits = json.load(r).get("hits", [])
+        # A API de vídeos do Pixabay não filtra orientação: os da orientação pedida vêm primeiro
+        hits.sort(key=lambda h: _vertical(h) != (orientacao == "portrait"))
+        for h in hits:
+            if (h.get("duration") or 0) < 3:
+                continue
+            arquivo = escolher_pixabay(h)
+            if arquivo:
+                _baixar(arquivo["url"], destino)
+                log.info("B-roll '%s' (Pixabay): %s (%.1f MB)", busca, h.get("pageURL", ""),
+                         destino.stat().st_size / 1e6)
+                return True
+    except OSError as e:  # rede, chave inválida (HTTPError é OSError), limite de pedidos
+        log.warning("B-roll '%s' no Pixabay falhou: %s", busca, e)
+    return False
+
+
+def _pexels(busca: str, orientacao: str, destino: Path, chave_api: str) -> bool:
     try:
         url = API + "?" + urllib.parse.urlencode({"query": busca, "orientation": orientacao, "size": "medium",
                                                   "per_page": 8})
@@ -67,15 +129,9 @@ def buscar(busca: str, orientacao: str = "portrait") -> Path | None:
             arquivo = escolher_arquivo(v, orientacao)
             if not arquivo:
                 continue
-            PASTA.mkdir(parents=True, exist_ok=True)
-            parcial = destino.with_suffix(".part")
-            with urllib.request.urlopen(urllib.request.Request(arquivo["link"], headers={"User-Agent": "Clipador/1.0"}),
-                                        timeout=60) as r, open(parcial, "wb") as f:
-                while bloco := r.read(1 << 20):
-                    f.write(bloco)
-            parcial.replace(destino)
+            _baixar(arquivo["link"], destino)
             log.info("B-roll \"%s\": %s (%.1f MB)", busca, v.get("url", ""), destino.stat().st_size / 1e6)
-            return destino
+            return True
     except OSError as e:  # rede, chave inválida (HTTPError é OSError), limite de pedidos
-        log.warning("B-roll \"%s\" falhou: %s", busca, e)
-    return None
+        log.warning("B-roll '%s' no Pexels falhou: %s", busca, e)
+    return False

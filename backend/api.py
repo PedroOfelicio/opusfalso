@@ -168,8 +168,10 @@ def _mascarar(chave: str) -> str:
 def ler_config():
     cfg = config.carregar()
     chave_ambiente = bool(__import__("os").environ.get("ANTHROPIC_API_KEY"))
-    pexels = cfg.get("pexels_key") or ""
-    return {**cfg, "pexels_key": (pexels[:4] + "••••••••" + pexels[-4:]) if pexels else "",
+    def mascara(v):
+        return (v[:4] + "••••••••" + v[-4:]) if v else ""
+    return {**cfg, "pexels_key": mascara(cfg.get("pexels_key") or ""),
+            "pixabay_key": mascara(cfg.get("pixabay_key") or ""),
             "api_key": _mascarar(config.api_key()), "api_key_origem":
             "config" if cfg.get("api_key") else ("ambiente" if chave_ambiente else None)}
 
@@ -177,6 +179,7 @@ def ler_config():
 class ConfigEntrada(BaseModel):
     api_key: str | None = None
     pexels_key: str | None = None
+    pixabay_key: str | None = None
     workspace_id: str | None = None
     modelo: str | None = None
     modelo_rapido: str | None = None
@@ -193,8 +196,9 @@ def salvar_config(dados: ConfigEntrada):
         novos.pop("api_key")  # veio a versão mascarada: não altera
     elif "api_key" in novos and not novos["api_key"].startswith("sk-ant-"):
         raise HTTPException(400, "Chave inválida: a chave da API da Anthropic começa com \"sk-ant-\".")
-    if "pexels_key" in novos and "••" in novos["pexels_key"]:
-        novos.pop("pexels_key")  # versão mascarada: não altera
+    for k in ("pexels_key", "pixabay_key"):
+        if k in novos and "••" in novos[k]:
+            novos.pop(k)  # versão mascarada: não altera
     if "pasta_saida" in novos:
         Path(novos["pasta_saida"]).mkdir(parents=True, exist_ok=True)
     config.salvar(novos)

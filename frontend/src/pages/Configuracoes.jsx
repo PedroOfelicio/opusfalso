@@ -65,7 +65,7 @@ export default function Configuracoes() {
   const salvar = async () => {
     setSalvando(true);
     try {
-      const dados = { modelo: cfg.modelo, modelo_rapido: cfg.modelo_rapido, pasta_saida: cfg.pasta_saida, usar_gpu: cfg.usar_gpu, modelo_whisper: cfg.modelo_whisper, idioma: cfg.idioma, workspace_id: (cfg.workspace_id || "").trim(), pexels_key: (cfg.pexels_key || "").trim() };
+      const dados = { modelo: cfg.modelo, modelo_rapido: cfg.modelo_rapido, pasta_saida: cfg.pasta_saida, usar_gpu: cfg.usar_gpu, modelo_whisper: cfg.modelo_whisper, idioma: cfg.idioma, workspace_id: (cfg.workspace_id || "").trim(), pexels_key: (cfg.pexels_key || "").trim(), pixabay_key: (cfg.pixabay_key || "").trim() };
       if (novaChave.trim()) dados.api_key = novaChave.trim();
       setCfg(await api.salvarConfig(dados));
       setNovaChave("");
@@ -129,12 +129,19 @@ export default function Configuracoes() {
           <p className="text-xs text-apagado mt-2">Só preencha se a API reclamar que a chave não está vinculada a um workspace. O ID aparece em console.anthropic.com → Settings → Workspaces.</p>
         </div>
         <div>
-          <label className="rotulo">Chave do Pexels (B-roll)</label>
+          <label className="rotulo">Chave do Pixabay (B-roll)</label>
+          <input value={cfg.pixabay_key || ""} onChange={mudar("pixabay_key")} placeholder="cole a chave grátis do Pixabay" className="campo font-mono text-[13px] mt-2" autoComplete="off" />
+          <p className="text-xs text-apagado mt-2">
+            Para os vídeos de apoio (B-roll). É grátis: crie uma conta no Pixabay e, logado, abra{" "}
+            <a href="https://pixabay.com/api/docs/" target="_blank" rel="noreferrer" className="text-roxo hover:underline">pixabay.com/api/docs</a>
+            : a chave aparece na seção "Parameters" (key). Os vídeos podem ir em vídeo monetizado, sem dar crédito.
+          </p>
+        </div>
+        <div>
+          <label className="rotulo">Chave do Pexels (opcional)</label>
           <input value={cfg.pexels_key || ""} onChange={mudar("pexels_key")} placeholder="cole a chave grátis do Pexels" className="campo font-mono text-[13px] mt-2" autoComplete="off" />
           <p className="text-xs text-apagado mt-2">
-            Para os vídeos de apoio (B-roll). É grátis: crie uma conta em{" "}
-            <a href="https://www.pexels.com/api/" target="_blank" rel="noreferrer" className="text-roxo hover:underline">pexels.com/api</a>{" "}
-            e copie a chave. Os vídeos do Pexels podem ser usados em vídeo monetizado, sem dar crédito.
+            Segunda fonte de vídeos de apoio, se você tiver uma chave (o Pexels pausou chaves novas).
           </p>
         </div>
         <div>

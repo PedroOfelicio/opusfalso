@@ -481,7 +481,7 @@ export default function Home() {
             <Alternador ativo={titulo} aoMudar={setTitulo} rotulo="Título gancho" descricao="Aparece nos primeiros segundos" />
             <Alternador ativo={limparVoz ?? modo === "falado"} aoMudar={setLimparVoz} rotulo="Melhorar a voz" descricao="Tira ruído de fundo e zumbido (automático na fala)" />
             {modo === "falado" && (
-              <Alternador ativo={broll} aoMudar={setBroll} rotulo="B-roll (vídeos de apoio)" descricao="Quando a fala cita algo concreto (“comprei um carro”), cobre a tela por 2-3 s com um vídeo do Pexels. Precisa da chave grátis em Configurações" />
+              <Alternador ativo={broll} aoMudar={setBroll} rotulo="B-roll (vídeos de apoio)" descricao="Quando a fala cita algo concreto (“comprei um carro”), cobre a tela por 2-3 s com um vídeo do Pixabay. Precisa da chave grátis em Configurações" />
             )}
             <Alternador ativo={diretor} aoMudar={setDiretor} rotulo="Diretor de arte (IA)" descricao="O Claude escolhe legenda, cor, transições, zoom e efeitos de cada clipe pelo clima do trecho. Desligado: todos iguais ao estilo escolhido" />
             <Alternador ativo={abertura} aoMudar={setAbertura} rotulo="Abrir com o clímax" descricao="1-2 s do melhor momento antes do contexto (segura nos 3 primeiros segundos)" />

@@ -43,6 +43,7 @@ PADRAO = {
     "modelo_whisper": "large-v3-turbo",
     "idioma": "",                       # vazio = detectar automaticamente
     "pexels_key": "",                   # B-roll (pexels.com/api, grátis); vazio = PEXELS_API_KEY
+    "pixabay_key": "",                  # B-roll (pixabay.com/api/docs, grátis); vazio = PIXABAY_API_KEY
 }
 
 _trava = threading.Lock()
