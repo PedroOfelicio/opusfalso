@@ -152,17 +152,28 @@ def desligar():
     return {"ok": True}
 
 
+_gpu_cache: list = []
+
+
+def _nome_gpu() -> str | None:
+    """Nome da placa NVIDIA (consultado uma vez só; o nvidia-smi abre console, então vai escondido)."""
+    if not _gpu_cache:
+        gpu = None
+        try:
+            saida = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
+                                   capture_output=True, text=True, timeout=5,
+                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            gpu = saida.stdout.strip() or None
+        except Exception:
+            pass
+        _gpu_cache.append(gpu)
+    return _gpu_cache[0]
+
+
 @app.get("/api/sistema")
 def sistema():
-    gpu = None
-    try:
-        saida = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
-                               capture_output=True, text=True, timeout=5)
-        gpu = saida.stdout.strip() or None
-    except Exception:
-        pass
     return {
-        "gpu": gpu, "cuda": tr.gpu_disponivel(), "remotion": legendas.remotion_disponivel(),
+        "gpu": _nome_gpu(), "cuda": tr.gpu_disponivel(), "remotion": legendas.remotion_disponivel(),
         "tem_chave": bool(config.api_key()), "dados": str(config.DADOS), "fila": fila.pendentes(),
         "disco_livre": armazenamento.livre(),
         "claude_erro": llm.estado["ultimo_erro"],
@@ -810,7 +821,7 @@ def abrir_pasta(pid: str):
     """Abre a pasta de saída no Explorer (é uma ferramenta local)."""
     meta = _meta(pid)
     if meta.get("saida_dir") and Path(meta["saida_dir"]).exists():
-        subprocess.Popen(["explorer", meta["saida_dir"]])
+        subprocess.Popen(["explorer", meta["saida_dir"]], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return {"ok": True}
 
 
@@ -851,7 +862,7 @@ def excluir_audio(caminho: str):
 @app.post("/api/audio/abrir-pasta")
 def abrir_pasta_audio():
     biblioteca.preparar()
-    subprocess.Popen(["explorer", str(biblioteca.PASTA_AUDIO)])
+    subprocess.Popen(["explorer", str(biblioteca.PASTA_AUDIO)], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return {"ok": True}
 
 

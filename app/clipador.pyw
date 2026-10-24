@@ -47,7 +47,9 @@ def no_ar() -> bool:
 def ligar_servidor() -> None:
     global servidor
     DADOS.mkdir(parents=True, exist_ok=True)
-    python = Path(sys.executable)  # pythonw.exe: sem console; a saída do uvicorn vai para os logs
+    # python.exe (não o pythonw) com o console ESCONDIDO: os programas que o servidor chama (ffmpeg, node,
+    # nvidia-smi...) usam esse console invisível em vez de abrir, cada um, uma janela preta piscando
+    python = Path(sys.executable).with_name("python.exe")
     servidor = subprocess.Popen(
         [str(python), "-m", "uvicorn", "api:app", "--host", "127.0.0.1", "--port", str(PORTA), "--no-access-log"],
         cwd=str(BACKEND), stdout=open(DADOS / "api.log", "ab"), stderr=open(DADOS / "api_err.log", "ab"),
