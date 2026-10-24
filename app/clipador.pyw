@@ -135,7 +135,7 @@ def main():
 
     import pystray
     from PIL import Image
-    icone = pystray.Icon("Clipador", Image.open(Path(__file__).with_name("icone.ico")), "Clipador (ligando...)",
+    icone = pystray.Icon("Clipador", Image.open(Path(__file__).with_name("icone_bandeja.png")), "Clipador (ligando...)",
                          menu=pystray.Menu(pystray.MenuItem("Abrir o Clipador", abrir_janela, default=True),
                                            pystray.MenuItem("Sair (desliga o servidor)", sair)))
 
