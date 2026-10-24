@@ -15,7 +15,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import analise_audio as aa
 import biblioteca_audio as bib
+import numpy as np
 import config
 import custos
 import editor_ffmpeg as ef
@@ -571,3 +573,73 @@ class CustoPorClipe(Temporario):
         self.assertAlmostEqual(r["b"], 0.08 / 3, places=5)
         self.assertAlmostEqual(sum(r.values()), 0.10, places=5)
         self.assertEqual(pipeline.custo_dos_clipes({"custo": 0.0, "clips": []}), {})
+
+
+# ---------------------------------------------------------------- modo grátis no gameplay
+
+class GameplaySemIA(unittest.TestCase):
+    def test_conta_ataques_por_segundo(self):
+        fluxo = np.zeros(200)  # PASSO 0,05 s: 10 s de áudio
+        fluxo[[42, 46, 50]] = 50.0   # rajada no segundo 2
+        fluxo[150] = 50.0            # som isolado no segundo 7
+        at = aa.ataques_por_segundo(fluxo, 200)
+        self.assertEqual(at[2], 3)
+        self.assertEqual(at[7], 1)
+        self.assertEqual(sum(at), 4)
+
+    def test_pico_vai_para_a_rajada_que_ficou_no_clipe(self):
+        analise = {"ataques": [0] * 10 + [3, 4, 2] + [0] * 10 + [5, 5, 5] + [0] * 10}
+        corte = Corte(inicio=5, fim=30, titulo="x", nota=50, pico=8.0, remover=[(20.0, 30.0)])
+        # a rajada maior (23-25) foi cortada: fica a de 10-12
+        self.assertEqual(pipeline._pico_por_ataques(corte, analise).pico, 11.5)
+        sem = Corte(inicio=0, fim=5, titulo="x", nota=50, pico=2.0)
+        self.assertEqual(pipeline._pico_por_ataques(sem, analise).pico, 2.0)  # nenhuma rajada: mantém
+
+
+# ---------------------------------------------------------------- limite de gasto
+
+class LimiteDeGasto(Temporario):
+    def _ambiente(self, limite_projeto=0.0, limite_mes=0.0, custo_projeto=0.0, gasto_mes=0.0):
+        (self.pasta / "projeto01").mkdir()
+        (self.pasta / "projeto01" / "meta.json").write_text(json.dumps({"custo": custo_projeto, "opcoes": {}}), encoding="utf-8")
+        import time as _t
+        (self.pasta / "custos.json").write_text(json.dumps(
+            {"total": gasto_mes, "chamadas": 1, "historico": [], "meses": {_t.strftime("%Y-%m"): gasto_mes}}), encoding="utf-8")
+        cfg = {**config.PADRAO, "limite_projeto": limite_projeto, "limite_mes": limite_mes}
+        return [mock.patch.object(config, "PASTA_PROJETOS", self.pasta),
+                mock.patch.object(config, "ARQ_CUSTOS", self.pasta / "custos.json"),
+                mock.patch.object(config, "carregar", return_value=cfg)]
+
+    def _com(self, patches, func):
+        for p in patches:
+            p.start()
+        try:
+            return func()
+        finally:
+            for p in patches:
+                p.stop()
+
+    def test_passou_do_limite_do_projeto_nao_chama_a_api(self):
+        def rodar():
+            with mock.patch.object(llm, "_cliente", side_effect=AssertionError("chamou a API")):
+                with self.assertRaises(llm.LimiteAtingido):
+                    llm._chamar_json("s", "c", Correcoes, "projeto01", "teste")
+            self.assertIsNone(llm.estado["ultimo_erro"])  # não aparece como "Claude com erro"
+        llm.estado["ultimo_erro"] = None
+        self._com(self._ambiente(limite_projeto=0.05, custo_projeto=0.06), rodar)
+
+    def test_limite_do_mes_e_sem_limite(self):
+        def mes():
+            with self.assertRaises(llm.LimiteAtingido):
+                llm._conferir_limite("projeto01")
+        self._com(self._ambiente(limite_mes=2.0, gasto_mes=2.5), mes)
+        self.tearDown(); self.setUp()
+        self._com(self._ambiente(limite_projeto=0, limite_mes=0, custo_projeto=9, gasto_mes=99),
+                  lambda: llm._conferir_limite("projeto01"))  # 0 = sem limite: não levanta
+
+    def test_zerar_mantem_o_gasto_do_mes(self):
+        def rodar():
+            custos.zerar()
+            self.assertEqual(custos.resumo()["total"], 0.0)
+            self.assertAlmostEqual(custos.gasto_do_mes(), 1.5)
+        self._com(self._ambiente(gasto_mes=1.5), rodar)

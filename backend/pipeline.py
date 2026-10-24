@@ -16,6 +16,8 @@ import re
 import time
 from pathlib import Path
 
+import numpy as np
+
 import analise_audio
 import armazenamento
 import biblioteca_audio as biblioteca
@@ -108,6 +110,9 @@ class Progresso:
 def _claude_falhou(pid: str, erro: Exception):
     if isinstance(erro, llm.IaDesligada):
         return  # o usuário escolheu "Sem IA": não é falha
+    if isinstance(erro, llm.LimiteAtingido):
+        _aviso(pid, f"{erro} (Configurações > Limite de gasto): o resto deste projeto foi feito sem IA, grátis.")
+        return
     _aviso(pid, f"Claude indisponível: {str(erro).rstrip('.')}. Usando o planejador local (mais simples).")
 
 
@@ -828,7 +833,9 @@ def _cortes_gameplay(video, transcricao, analise, plano, pid, excluir=None, quan
         recusados = False
         _claude_falhou(pid, e)
 
-    melhores = sorted(candidatos, key=lambda c: c["energia"], reverse=True)[:quantidade]
+    # Sem IA (ou o Claude fora do ar): os trechos com mais tiroteio primeiro, não só o som mais alto
+    melhores = sorted(candidatos, key=lambda c: c["energia"] + 0.5 * min(c.get("ataques", 0), 60),
+                      reverse=True)[:quantidade]
     titulos = random.sample(TITULOS_GAMEPLAY, len(TITULOS_GAMEPLAY))
     cortes = []
     for c in melhores:
@@ -838,7 +845,17 @@ def _cortes_gameplay(video, transcricao, analise, plano, pid, excluir=None, quan
         cortes.append(Corte(inicio=inicio, fim=fim, titulo=titulos[len(cortes) % len(titulos)], nota=nota,
                             justificativa=f"Pico de energia no áudio ({c['picos']} pico(s) no trecho{motivo})",
                             pico=c["pico"]))
-    return cortes
+    if not analise.get("ataques"):
+        return cortes
+    # A mesma montagem da revisão com IA, mas com rótulos locais (tela parada, ataques no áudio): custo zero
+    revisados = []
+    for k, c in enumerate(cortes):
+        proibidos = ([(x.inicio, x.fim) for x in revisados] + [(x.inicio, x.fim) for x in cortes[k + 1:]]
+                     + list(excluir or []))
+        r = _revisar(video, c, pid, plano.duracao_min, plano.duracao_max, analise["duracao"], proibidos, cancelado,
+                     rotular=lambda x, y: _rotular_local(video, x, y, analise))
+        revisados.append(_pico_por_ataques(r, analise))
+    return revisados
 
 
 VIVO = ("acao", "reacao")
@@ -862,18 +879,80 @@ def _rotular(video, a: float, b: float, pid: str, espaco: float = 1.5) -> list[t
     return [(a + (k + 0.5) * passo, passo, r.quadros[k]) for k in range(n)]
 
 
+PARADO = 2.0          # diferença média entre quadros (0-255) abaixo disso: tela parada (menu, loading, placar)
+
+
+def _rotular_local(video, a: float, b: float, analise: dict, espaco: float = 1.0) -> list[tuple[float, float, str]]:
+    """Rótulos da revisão SEM IA (custo zero), ~1 amostra por segundo de [a, b]:
+    tela parada = "menu"; rajada de ataques no áudio (tiros, golpes, explosões) ou som forte com ataque =
+    "acao"; o resto (andando, comprando, esperando) = "morto", que só fica no clipe colado numa ação."""
+    import cv2
+
+    dur = b - a
+    if dur < 2:
+        return []
+    n = max(2, int(round(dur / espaco)))
+    passo = dur / n
+    at = analise.get("ataques") or []
+    curva = analise.get("curva") or []
+    forte = float(np.percentile(curva, 85)) if curva else 101
+
+    def ataques(s):
+        return sum(at[j] for j in (s - 1, s, s + 1) if 0 <= j < len(at))
+
+    cap = cv2.VideoCapture(str(video))
+
+    def quadro(t):
+        cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000)
+        ok, f = cap.read()
+        return cv2.cvtColor(cv2.resize(f, (160, 90)), cv2.COLOR_BGR2GRAY).astype(np.float32) if ok else None
+
+    amostras = []
+    try:
+        for k in range(n):
+            t = a + (k + 0.5) * passo
+            q0, q1 = quadro(t - 0.25), quadro(t + 0.25)
+            parado = q0 is not None and q1 is not None and float(np.abs(q0 - q1).mean()) < PARADO
+            s = int(t)
+            if parado:
+                rotulo = "menu"
+            elif ataques(s) >= 3 or (0 <= s < len(curva) and curva[s] >= forte and 0 <= s < len(at) and at[s] >= 1):
+                rotulo = "acao"
+            else:
+                rotulo = "morto"
+            amostras.append((t, passo, rotulo))
+    finally:
+        cap.release()
+    return amostras
+
+
+def _pico_por_ataques(corte: Corte, analise: dict) -> Corte:
+    """Sem IA: o "pico" (centro do replay e do zoom) vai para a maior rajada de ataques que ficou no clipe,
+    em vez do som mais alto (que pode ser uma vinheta de início de round)."""
+    at = analise.get("ataques") or []
+    melhor, nota = None, 2
+    for x, y in _subtrair([(corte.inicio, corte.fim)], corte.remover):
+        for s in range(int(x), int(y)):
+            soma = sum(at[j] for j in (s - 1, s, s + 1) if 0 <= j < len(at))
+            if soma > nota:
+                melhor, nota = s + 0.5, soma
+    return corte if melhor is None else corte.model_copy(update={"pico": round(melhor, 2)})
+
+
 def _revisar(video, corte: Corte, pid: str, minimo: float, maximo: float, duracao_video: float,
-             proibidos: list | None = None, cancelado=None) -> Corte:
+             proibidos: list | None = None, cancelado=None, rotular=None) -> Corte:
     """Revisão fina: rotula os quadros do trecho e monta o clipe só com jogo (sem menus, fase de compra,
     telas de fim de round). Se a ação não bastar para a duração mínima, amplia a janela em até 2 x 30 s
-    para cada lado (sem invadir os outros clipes) e emenda os lances vizinhos em montagem."""
+    para cada lado (sem invadir os outros clipes) e emenda os lances vizinhos em montagem.
+    rotular(a, b): quem rotula; padrão: o Claude olhando os quadros (_rotular_local faz sem IA)."""
     if cancelado is not None and cancelado.is_set():
         raise Cancelado()
+    rotular = rotular or (lambda x, y: _rotular(video, x, y, pid))
     # limites: não entra no trecho de outro clipe
     antes = max([y for x, y in proibidos or [] if y <= corte.inicio + 1] + [0.0])
     depois = min([x for x, y in proibidos or [] if x >= corte.fim - 1] + [duracao_video])
     try:
-        amostras = _rotular(video, corte.inicio, corte.fim, pid)
+        amostras = rotular(corte.inicio, corte.fim)
         for _ in range(2):
             if not amostras:
                 break
@@ -886,9 +965,9 @@ def _revisar(video, corte: Corte, pid: str, minimo: float, maximo: float, duraca
             if novo0 >= j0 - 2 and novo1 <= j1 + 2:
                 break  # sem espaço para crescer
             if novo0 < j0 - 2:
-                amostras = _rotular(video, novo0, j0, pid) + amostras
+                amostras = rotular(novo0, j0) + amostras
             if novo1 > j1 + 2:
-                amostras = amostras + _rotular(video, j1, novo1, pid)
+                amostras = amostras + rotular(j1, novo1)
     except llm.ErroClaude as e:
         log.warning("Revisão do clipe indisponível: %s", e)
         return corte

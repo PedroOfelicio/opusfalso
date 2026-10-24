@@ -5,6 +5,9 @@ Análise de áudio para o modo Gameplay: encontra picos de energia
 - volume (RMS em dB), bom para gritos e momentos intensos longos
 - fluxo espectral (quanto o espectro "muda" de repente), bom para tiros e explosões
 
+e conta os "ataques" de cada segundo (sons secos e agudos de repente: tiro, golpe, explosão). Rajada de
+ataques é ação; um som forte isolado (vinheta de início de round, música) não é.
+
 O resultado fica em cache (DADOS/cache/<hash>/audio.json).
 """
 import logging
@@ -34,7 +37,7 @@ def _zscore(x: np.ndarray) -> np.ndarray:
 def analisar(video, progresso=None, cancelado=None) -> dict:
     arq = pasta_cache(video) / "audio.json"
     em_cache = config.ler_json(arq)
-    if em_cache:
+    if em_cache and "ataques" in em_cache:  # cache de antes dos ataques: analisa de novo
         log.info("Análise de áudio encontrada no cache (%d picos)", len(em_cache["picos"]))
         return em_cache
 
@@ -54,6 +57,7 @@ def analisar(video, progresso=None, cancelado=None) -> dict:
     # Fluxo espectral, em blocos para não estourar memória em vídeos longos
     janela = np.hanning(tam)
     fluxo = np.zeros(n)
+    fluxo_agudo = np.zeros(n)  # só a metade de cima do espectro: estalos, tiros, impactos
     anterior = None
     for ini in range(0, n, 4000):
         mag = np.abs(np.fft.rfft(quadros[ini:ini + 4000] * janela, axis=1))
@@ -62,7 +66,9 @@ def analisar(video, progresso=None, cancelado=None) -> dict:
             mag_ext = np.vstack([anterior[None], mag])
         else:
             mag_ext = np.vstack([mag[:1], mag])
-        fluxo[ini:ini + len(mag)] = np.maximum(np.diff(mag_ext, axis=0), 0).sum(axis=1)
+        subida = np.maximum(np.diff(mag_ext, axis=0), 0)
+        fluxo[ini:ini + len(mag)] = subida.sum(axis=1)
+        fluxo_agudo[ini:ini + len(mag)] = subida[:, subida.shape[1] // 4:].sum(axis=1)
         anterior = mag[-1]
         if progresso:
             progresso(min((ini + 4000) / n, 1.0), "Analisando energia do áudio")
@@ -96,11 +102,25 @@ def analisar(video, progresso=None, cancelado=None) -> dict:
         "duracao": round(n * PASSO, 2),
         "picos": picos,
         "curva": [round(float(v), 1) for v in curva],
+        "ataques": ataques_por_segundo(fluxo_agudo, n),
         "db_medio": round(float(np.median(db)), 1),
     }
     config.gravar_json(arq, resultado)
     log.info("Áudio analisado: %d picos encontrados", len(picos))
     return resultado
+
+
+def ataques_por_segundo(fluxo_agudo: np.ndarray, n: int) -> list[int]:
+    """Quantos ataques (máximos locais bem acima do normal do vídeo) caem em cada segundo."""
+    z = _zscore(fluxo_agudo)
+    pico = (z[1:-1] > 2.0) & (z[1:-1] >= z[:-2]) & (z[1:-1] >= z[2:])
+    segundos = ((np.nonzero(pico)[0] + 1) * PASSO).astype(int)
+    return np.bincount(segundos, minlength=int(n * PASSO) + 1).tolist()
+
+
+def ataques_no_intervalo(analise: dict, inicio: float, fim: float) -> int:
+    at = analise.get("ataques") or []
+    return int(sum(at[max(0, int(inicio)):max(0, int(fim)) + 1]))
 
 
 PALAVRAS_REACAO = {"caraca", "nossa", "meu", "deus", "mano", "kkk", "kkkk", "caramba", "vai", "morreu",
@@ -142,6 +162,7 @@ def candidatos_gameplay(analise: dict, transcricao: dict | None, dmin: float, dm
         candidatos.append({
             "id": len(candidatos) + 1, "inicio": round(float(inicio), 2), "fim": round(float(fim), 2), "pico": p["t"],
             "energia": round(min(energia, 100), 1), "picos": len(dentro), "fala": fala,
+            "ataques": ataques_no_intervalo(analise, inicio, fim),
         })
         ocupados.append((inicio, fim))
         if len(candidatos) >= maximo:

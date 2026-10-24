@@ -38,11 +38,29 @@ class IaDesligada(ErroClaude):
     """O projeto foi criado no modo "Sem IA": nenhuma chamada ao Claude (custo zero); vale o planejador local."""
 
 
-def ia_desligada(projeto_id) -> bool:
+class LimiteAtingido(ErroClaude):
+    """Passou do limite de gasto (Configurações): o resto do projeto sai pelo planejador local."""
+
+
+def _meta(projeto_id) -> dict:
     if not projeto_id:
-        return False
-    meta = config.ler_json(config.PASTA_PROJETOS / projeto_id / "meta.json", {}) or {}
-    return bool((meta.get("opcoes") or {}).get("sem_ia"))
+        return {}
+    return config.ler_json(config.PASTA_PROJETOS / projeto_id / "meta.json", {}) or {}
+
+
+def ia_desligada(projeto_id) -> bool:
+    return bool((_meta(projeto_id).get("opcoes") or {}).get("sem_ia"))
+
+
+def _conferir_limite(projeto_id) -> None:
+    """Confere ANTES de cada chamada paga (a última pode passar um pouco do limite, nunca várias)."""
+    cfg = config.carregar()
+    limite = float(cfg.get("limite_projeto") or 0)
+    if limite > 0 and projeto_id and (_meta(projeto_id).get("custo") or 0) >= limite:
+        raise LimiteAtingido(f"Limite de US$ {limite:.2f} por projeto atingido".replace(".", ","))
+    limite = float(cfg.get("limite_mes") or 0)
+    if limite > 0 and custos.gasto_do_mes() >= limite:
+        raise LimiteAtingido(f"Limite de US$ {limite:.2f} por mês atingido".replace(".", ","))
 
 
 # Última falha da API (mostrada na interface); some quando uma chamada funciona
@@ -87,6 +105,8 @@ def _chamar_json(sistema: str, conteudo, modelo_resposta: type[BaseModel], proje
         resultado = _chamar_json_sem_estado(sistema, conteudo, modelo_resposta, projeto_id, motivo, max_tokens, rapido)
         estado["ultimo_erro"] = None
         return resultado
+    except LimiteAtingido:
+        raise  # não é erro da API: a chave continua boa
     except ErroClaude as e:
         estado["ultimo_erro"] = str(e)
         raise
@@ -134,7 +154,8 @@ def _chamar_json_sem_estado(sistema, conteudo, modelo_resposta, projeto_id, moti
     arquivo = _arquivo_resposta(projeto_id, modelo, sistema, conteudo, max_tokens, extras, modelo_resposta)
     guardada = _resposta_guardada(arquivo, modelo_resposta, motivo)
     if guardada is not None:
-        return guardada
+        return guardada  # resposta guardada não custa: vale mesmo depois do limite
+    _conferir_limite(projeto_id)
     cliente = _cliente()
 
     for tentativa in (1, 2):

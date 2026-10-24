@@ -1,8 +1,8 @@
 // Configurações: chave da API, modelo, pasta de saída, GPU/Whisper e custo acumulado.
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { ChevronDown, Copy, Cpu, DollarSign, Download, Eye, EyeOff, FolderOpen, HardDrive, KeyRound, Music, Pause, Play, Save, Trash2 } from "lucide-react";
-import { api, CLIMAS } from "../api";
+import { ChevronDown, Copy, Cpu, DollarSign, Download, Eye, EyeOff, FolderOpen, HardDrive, KeyRound, Music, Pause, Play, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { api, CLIMAS, formatarCusto } from "../api";
 import { Alternador, Aviso, Botao, Confirmar, EstadoErro, Esqueleto, useAvisar } from "../components/ui";
 
 const MODELOS = [
@@ -65,7 +65,7 @@ export default function Configuracoes() {
   const salvar = async () => {
     setSalvando(true);
     try {
-      const dados = { modelo: cfg.modelo, modelo_rapido: cfg.modelo_rapido, pasta_saida: cfg.pasta_saida, usar_gpu: cfg.usar_gpu, modelo_whisper: cfg.modelo_whisper, idioma: cfg.idioma, workspace_id: (cfg.workspace_id || "").trim(), pexels_key: (cfg.pexels_key || "").trim(), pixabay_key: (cfg.pixabay_key || "").trim() };
+      const dados = { modelo: cfg.modelo, modelo_rapido: cfg.modelo_rapido, pasta_saida: cfg.pasta_saida, usar_gpu: cfg.usar_gpu, modelo_whisper: cfg.modelo_whisper, idioma: cfg.idioma, limite_projeto: Number(cfg.limite_projeto) || 0, limite_mes: Number(cfg.limite_mes) || 0, workspace_id: (cfg.workspace_id || "").trim(), pexels_key: (cfg.pexels_key || "").trim(), pixabay_key: (cfg.pixabay_key || "").trim() };
       if (novaChave.trim()) dados.api_key = novaChave.trim();
       setCfg(await api.salvarConfig(dados));
       setNovaChave("");
@@ -224,6 +224,30 @@ export default function Configuracoes() {
       <BibliotecaAudio />
 
       <Armazenamento />
+
+      <Secao id="limite" icone={ShieldCheck} titulo="Limite de gasto" descricao="Ao chegar no limite, o app não para: termina o projeto no modo Sem IA (grátis) e avisa no projeto.">
+        <div className="grid sm:grid-cols-2 gap-4">
+          {[
+            { k: "limite_projeto", rotulo: "Máximo por projeto", dica: "Um projeto típico com IA custa US$ 0,01 a 0,05." },
+            { k: "limite_mes", rotulo: "Máximo por mês", dica: `Neste mês: ${formatarCusto(custos?.mes)}` },
+          ].map(({ k, rotulo, dica }) => (
+            <div key={k}>
+              <label className="rotulo">{rotulo}</label>
+              <div className="relative mt-2">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-suave">US$</span>
+                <input
+                  type="number" min="0" step="0.01" inputMode="decimal"
+                  value={cfg[k] || ""}
+                  onChange={(e) => setCfg({ ...cfg, [k]: e.target.value })}
+                  placeholder="sem limite"
+                  className="campo pl-11 tabular-nums"
+                />
+              </div>
+              <p className="text-xs text-apagado mt-1.5">{dica}</p>
+            </div>
+          ))}
+        </div>
+      </Secao>
 
       <Secao icone={DollarSign} titulo="Custo acumulado estimado" descricao="Soma de todas as chamadas ao Claude (tokens × preço do modelo).">
         <div className="flex items-end justify-between">

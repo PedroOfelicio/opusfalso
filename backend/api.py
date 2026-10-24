@@ -22,7 +22,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from starlette.background import BackgroundTask
 
 import armazenamento
@@ -218,6 +218,8 @@ class ConfigEntrada(BaseModel):
     usar_gpu: bool | None = None
     modelo_whisper: str | None = None
     idioma: str | None = None
+    limite_projeto: float | None = Field(None, ge=0, le=1000)
+    limite_mes: float | None = Field(None, ge=0, le=10000)
 
 
 @app.post("/api/config/testar")
@@ -301,7 +303,8 @@ def salvar_config(dados: ConfigEntrada):
 @app.get("/api/custos")
 def ler_custos():
     r = custos.resumo()
-    return {"total": r["total"], "chamadas": r["chamadas"], "historico": r["historico"][-50:][::-1]}
+    return {"total": r["total"], "chamadas": r["chamadas"], "historico": r["historico"][-50:][::-1],
+            "mes": custos.gasto_do_mes()}
 
 
 @app.delete("/api/custos")

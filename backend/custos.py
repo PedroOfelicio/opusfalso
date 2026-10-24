@@ -81,6 +81,9 @@ def registrar(modelo: str, usage, projeto_id: str | None = None, motivo: str = "
             "custo": round(custo, 6), "projeto": projeto_id, "motivo": motivo,
         })
         dados["historico"] = dados["historico"][-500:]  # não deixa o arquivo crescer para sempre
+        meses = _meses(dados)
+        mes = time.strftime("%Y-%m")
+        meses[mes] = round(meses.get(mes, 0) + custo, 6)
         config.gravar_json(config.ARQ_CUSTOS, dados)
     medida = getattr(_local, "medida", None)
     if medida is not None:
@@ -90,9 +93,28 @@ def registrar(modelo: str, usage, projeto_id: str | None = None, motivo: str = "
     return custo
 
 
+def _meses(dados: dict) -> dict:
+    """Gasto por mês ("2026-10": 1.23). Arquivo de antes disso: monta pelo histórico que houver."""
+    if "meses" not in dados:
+        meses: dict[str, float] = {}
+        for h in dados.get("historico", []):
+            mes = (h.get("quando") or "")[:7]
+            if mes:
+                meses[mes] = round(meses.get(mes, 0) + h.get("custo", 0), 6)
+        dados["meses"] = meses
+    return dados["meses"]
+
+
+def gasto_do_mes() -> float:
+    return _meses(resumo()).get(time.strftime("%Y-%m"), 0.0)
+
+
 def resumo() -> dict:
     return config.ler_json(config.ARQ_CUSTOS, {"total": 0.0, "chamadas": 0, "historico": []})
 
 
 def zerar() -> None:
-    config.gravar_json(config.ARQ_CUSTOS, {"total": 0.0, "chamadas": 0, "historico": []})
+    """Zera o acumulado e o histórico; o gasto do mês fica (é ele que o limite mensal confere)."""
+    with _trava:
+        meses = _meses(resumo())
+        config.gravar_json(config.ARQ_CUSTOS, {"total": 0.0, "chamadas": 0, "historico": [], "meses": meses})

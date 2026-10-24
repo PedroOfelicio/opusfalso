@@ -44,6 +44,8 @@ PADRAO = {
     "idioma": "",                       # vazio = detectar automaticamente
     "pexels_key": "",                   # B-roll (pexels.com/api, grátis); vazio = PEXELS_API_KEY
     "pixabay_key": "",                  # B-roll (pixabay.com/api/docs, grátis); vazio = PIXABAY_API_KEY
+    "limite_projeto": 0.0,              # US$ máximos de Claude por projeto; passou, o resto sai sem IA (0 = sem limite)
+    "limite_mes": 0.0,                  # US$ máximos de Claude por mês, somando todos os projetos (0 = sem limite)
 }
 
 _trava = threading.Lock()
