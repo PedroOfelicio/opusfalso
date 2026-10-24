@@ -1,10 +1,10 @@
 {
-  "name": "Clipador",
-  "short_name": "Clipador",
+  "name": "Gadosso Edit",
+  "short_name": "Gadosso Edit",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0B0B10",
-  "theme_color": "#0B0B10",
+  "background_color": "#F4F4F6",
+  "theme_color": "#F4F4F6",
   "icons": [
     {
       "src": "/icone-192.png",

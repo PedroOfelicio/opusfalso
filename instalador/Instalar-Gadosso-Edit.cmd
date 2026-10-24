@@ -1,8 +1,8 @@
 @echo off
-title Instalador do Clipador
-echo Instalador do Clipador - editor de video com IA
+title Instalador do Gadosso Edit
+echo Instalador do Gadosso Edit - editor de video com IA
 echo.
-echo Vai instalar (se faltar) Python, FFmpeg e Node.js e baixar o Clipador.
+echo Vai instalar (se faltar) Python, FFmpeg e Node.js e baixar o Gadosso Edit.
 echo Na primeira vez leva de 10 a 30 minutos, dependendo da internet.
 echo.
 pause

@@ -1,5 +1,5 @@
 """
-Clipador como app de PC: dois cliques no atalho e ele
+Gadosso Edit como app de PC: dois cliques no atalho e ele
   1. liga o servidor local (sem janela preta), se ainda não estiver no ar;
   2. abre a interface numa janela própria (Edge/Chrome em modo aplicativo: sem barra de endereço nem abas);
   3. fica com um ícone na bandeja do relógio: fechar a janela não para o processamento; pelo ícone dá para
@@ -133,7 +133,7 @@ def procurar_atualizacao(icone) -> None:
         nova_versao["disponivel"] = True
         icone.update_menu()
         mensagem = (remoto.get("commit", {}).get("message") or "").splitlines()[0][:80]
-        icone.notify(f"Nova versão do Clipador: {mensagem}. Clique no ícone > Atualizar.", "Clipador")
+        icone.notify(f"Nova versão do Gadosso Edit: {mensagem}. Clique no ícone > Atualizar.", "Gadosso Edit")
 
 
 def atualizar(icone, *_):
@@ -165,15 +165,15 @@ def vigiar(icone) -> None:
                     nome = p.get("nome", "Projeto")[:60]
                     if agora == "pronto":
                         n = p.get("num_clips") if p.get("tipo") != "longo" else None
-                        icone.notify(f"{nome}: pronto" + (f" ({n} clipes)" if n else ""), "Clipador")
+                        icone.notify(f"{nome}: pronto" + (f" ({n} clipes)" if n else ""), "Gadosso Edit")
                     elif agora == "erro":
-                        icone.notify(f"{nome}: deu erro. Abra o app para tentar de novo.", "Clipador")
+                        icone.notify(f"{nome}: deu erro. Abra o app para tentar de novo.", "Gadosso Edit")
                 anteriores[p["id"]] = agora
                 if agora == "processando":
                     ativos.append(f"{p.get('nome', '')[:30]} {round((p.get('progresso') or 0) * 100)}%")
-            icone.title = "Clipador" + (f" - processando: {', '.join(ativos)}" if ativos else "")
+            icone.title = "Gadosso Edit" + (f" - processando: {', '.join(ativos)}" if ativos else "")
         except Exception:
-            icone.title = "Clipador (servidor fora do ar)"
+            icone.title = "Gadosso Edit (servidor fora do ar)"
         time.sleep(5)
 
 
@@ -182,14 +182,14 @@ def main():
         trava = socket.socket()
         trava.bind(("127.0.0.1", PORTA_TRAVA))  # fica aberta enquanto o lançador roda
     except OSError:
-        abrir_janela()  # já tem um Clipador rodando: só abre a janela
+        abrir_janela()  # já tem um Gadosso Edit rodando: só abre a janela
         return
 
     import pystray
     from PIL import Image
-    icone = pystray.Icon("Clipador", Image.open(Path(__file__).with_name("icone_bandeja.png")), "Clipador (ligando...)",
-                         menu=pystray.Menu(pystray.MenuItem("Abrir o Clipador", abrir_janela, default=True),
-                                           pystray.MenuItem("Atualizar o Clipador", atualizar,
+    icone = pystray.Icon("Gadosso Edit", Image.open(Path(__file__).with_name("icone_bandeja.png")), "Gadosso Edit (ligando...)",
+                         menu=pystray.Menu(pystray.MenuItem("Abrir o Gadosso Edit", abrir_janela, default=True),
+                                           pystray.MenuItem("Atualizar o Gadosso Edit", atualizar,
                                                             visible=lambda _: nova_versao["disponivel"]),
                                            pystray.MenuItem("Sair (desliga o servidor)", sair)))
 
@@ -198,7 +198,7 @@ def main():
         if not no_ar():
             ligar_servidor()
             if not esperar_servidor():
-                icone.notify(f"Não consegui ligar o servidor. Veja {DADOS / 'api_err.log'}", "Clipador")
+                icone.notify(f"Não consegui ligar o servidor. Veja {DADOS / 'api_err.log'}", "Gadosso Edit")
                 return
         abrir_janela()
         threading.Thread(target=vigiar, args=(icone,), daemon=True).start()

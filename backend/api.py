@@ -44,7 +44,7 @@ log = logging.getLogger("api")
 config.preparar_pastas()
 biblioteca.preparar()
 
-app = FastAPI(title="Editor de vídeo local com IA")
+app = FastAPI(title="Gadosso Edit")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
                    allow_methods=["*"], allow_headers=["*"])
 
@@ -256,7 +256,7 @@ def diagnostico():
     except OSError:
         log = ["(sem log)"]
     linhas = [
-        "=== Diagnóstico do Clipador ===",
+        "=== Diagnóstico do Gadosso Edit ===",
         f"Versão do app: {app_versao}",
         f"Windows: {platform.platform()}",
         f"Python: {sys.version.split()[0]}",

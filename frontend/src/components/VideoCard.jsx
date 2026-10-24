@@ -116,7 +116,7 @@ export default function VideoCard({ clip, projetoId, selecionado, aoSelecionar, 
             className="campo !py-1.5 text-sm font-semibold"
           />
         ) : (
-          <button onClick={() => setEditando(true)} className="w-full text-left text-sm font-semibold leading-snug line-clamp-2 min-h-[2.5rem] hover:text-white group/titulo cursor-text" title="Clique para editar o título">
+          <button onClick={() => setEditando(true)} className="w-full text-left text-sm font-semibold leading-snug line-clamp-2 min-h-[2.5rem] hover:text-texto group/titulo cursor-text" title="Clique para editar o título">
             {clip.titulo || <span className="text-apagado">Sem título</span>}
             <Pencil className="inline size-3 ml-1.5 text-apagado opacity-0 group-hover/titulo:opacity-100" />
           </button>
@@ -126,32 +126,32 @@ export default function VideoCard({ clip, projetoId, selecionado, aoSelecionar, 
           <Dica texto="Baixar" lado="cima">
             <a
               href={clip.video_url ? `${clip.video_url.split("?")[0]}?download=true` : undefined}
-              className={`p-2 rounded-lg text-suave hover:text-texto hover:bg-white/5 ${!clip.video_url && "pointer-events-none opacity-40"}`}
+              className={`p-2 rounded-lg text-suave hover:text-texto hover:bg-black/[0.05] ${!clip.video_url && "pointer-events-none opacity-40"}`}
             >
               <Download className="size-4" />
             </a>
           </Dica>
           {clip.capa_url && (
             <Dica texto="Baixar a capa (1080x1920, com o título)" lado="cima">
-              <a href={`${clip.capa_url.split("?")[0]}?download=true`} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-white/5">
+              <a href={`${clip.capa_url.split("?")[0]}?download=true`} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-black/[0.05]">
                 <ImageDown className="size-4" />
               </a>
             </Dica>
           )}
           <Dica texto="Editar" lado="cima">
-            <Link to={`/projetos/${projetoId}/clips/${clip.id}`} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-white/5">
+            <Link to={`/projetos/${projetoId}/clips/${clip.id}`} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-black/[0.05]">
               <Pencil className="size-4" />
             </Link>
           </Dica>
           {textoPost && (
             <Dica texto="Copiar legenda e hashtags do post" lado="cima">
-              <button onClick={copiarPost} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-white/5 cursor-pointer">
+              <button onClick={copiarPost} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-black/[0.05] cursor-pointer">
                 {copiado ? <Check className="size-4 text-verde" /> : <Copy className="size-4" />}
               </button>
             </Dica>
           )}
           <Dica texto="Regenerar: trocar por outro momento do vídeo" lado="cima">
-            <button onClick={aoRegenerar} disabled={ocupado} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-white/5 disabled:opacity-40 cursor-pointer">
+            <button onClick={aoRegenerar} disabled={ocupado} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-black/[0.05] disabled:opacity-40 cursor-pointer">
               <RefreshCw className="size-4" />
             </button>
           </Dica>

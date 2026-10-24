@@ -91,7 +91,7 @@ export default function Configuracoes() {
     <div className="max-w-3xl mx-auto px-6 py-8 space-y-5">
       <div className="flex items-center justify-between mb-2">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Configurações</h1>
+          <h1 className="text-2xl lg:text-3xl font-semibold tracking-tight">Configurações</h1>
           <p className="text-sm text-suave mt-1">Tudo fica salvo em {sistema?.dados}\config.json</p>
         </div>
         <Botao variante="primario" icone={Save} onClick={salvar} carregando={salvando}>Salvar</Botao>
@@ -228,7 +228,7 @@ export default function Configuracoes() {
       <Secao icone={DollarSign} titulo="Custo acumulado estimado" descricao="Soma de todas as chamadas ao Claude (tokens × preço do modelo).">
         <div className="flex items-end justify-between">
           <div>
-            <div className="text-4xl font-extrabold tabular-nums">US$ {custos?.total.toFixed(4)}</div>
+            <div className="text-4xl font-semibold tabular-nums">US$ {custos?.total.toFixed(4)}</div>
             <div className="text-sm text-suave">{custos?.chamadas} chamada(s)</div>
           </div>
           <Botao variante="fantasma" icone={Trash2} onClick={() => setZerando(true)}>Zerar</Botao>
@@ -476,7 +476,7 @@ function BibliotecaAudio() {
             <div className="rounded-xl border border-borda divide-y divide-borda">
               {audio.musicas[aberto].map((c) => (
                 <div key={c} className="flex items-center gap-3 px-3 py-2">
-                  <button onClick={() => tocar(c)} className="size-8 rounded-lg bg-card-2 hover:bg-white/10 flex items-center justify-center shrink-0 cursor-pointer" aria-label={tocando === c ? "Pausar" : "Ouvir"}>
+                  <button onClick={() => tocar(c)} className="size-8 rounded-lg bg-card-2 hover:bg-black/[0.08] flex items-center justify-center shrink-0 cursor-pointer" aria-label={tocando === c ? "Pausar" : "Ouvir"}>
                     {tocando === c ? <Pause className="size-4 text-roxo" /> : <Play className="size-4" />}
                   </button>
                   <span className="text-sm flex-1 min-w-0 truncate" title={c}>{nomeFaixa(c)}</span>

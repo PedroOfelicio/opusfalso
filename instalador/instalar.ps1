@@ -1,14 +1,14 @@
-# Instalador / atualizador do Clipador (Windows 10/11).
+# Instalador / atualizador do Gadosso Edit (Windows 10/11).
 #   Instalar:   powershell -ExecutionPolicy Bypass -File instalar.ps1
 #   Atualizar:  powershell -ExecutionPolicy Bypass -File instalar.ps1 -Atualizar
 # Instala (se faltar) Python 3.12, FFmpeg e Node.js pelo winget, baixa o app do GitHub, prepara o ambiente
 # (sem as bibliotecas da NVIDIA se o PC nao tiver placa NVIDIA), monta a interface, cria o atalho e abre o app.
-# Tudo fica em %LOCALAPPDATA%\Clipador (app, ambiente Python e dados), fora do OneDrive.
+# Tudo fica em %LOCALAPPDATA%\GadossoEdit (app, ambiente Python e dados), fora do OneDrive.
 param(
     [switch]$Atualizar,
     [switch]$NaoAbrir,
-    [string]$NomeAtalho = "Clipador",
-    [string]$Destino = (Join-Path $env:LOCALAPPDATA "Clipador"),
+    [string]$NomeAtalho = "Gadosso Edit",
+    [string]$Destino = (Join-Path $env:LOCALAPPDATA "GadossoEdit"),
     [string]$Repo = "PedroOfelicio/opusfalso",
     [string]$Ramo = "main"
 )
@@ -21,7 +21,7 @@ function Ok($texto) { Write-Host "    $texto" -ForegroundColor Green }
 function Aviso($texto) { Write-Host "    $texto" -ForegroundColor Yellow }
 function Falhar($texto) {
     Write-Host "`nERRO: $texto" -ForegroundColor Red
-    Write-Host "Se nao conseguir resolver, mande um print desta janela para quem te passou o Clipador."
+    Write-Host "Se nao conseguir resolver, mande um print desta janela para quem te passou o Gadosso Edit."
     Read-Host "Aperte Enter para fechar"
     exit 1
 }
@@ -41,14 +41,14 @@ function InstalarWinget($id, $nome) {
 $app = Join-Path $Destino "app"
 $venv = Join-Path $Destino "venv"
 $dados = Join-Path $Destino "dados"
-Write-Host "Clipador - editor de video com IA" -ForegroundColor Magenta
+Write-Host "Gadosso Edit - editor de video com IA" -ForegroundColor Magenta
 Write-Host ("Instalando em " + $Destino)
 
 # ------------------------------------------------------------------ espaco e programas
 Passo "Conferindo o espaco em disco"
 $disco = Get-PSDrive -Name ($Destino.Substring(0, 1))
 $livreGB = [math]::Round($disco.Free / 1GB, 1)
-if (-not $Atualizar -and $livreGB -lt 10) { Falhar "Pouco espaco: $livreGB GB livres. O Clipador precisa de uns 10 GB." }
+if (-not $Atualizar -and $livreGB -lt 10) { Falhar "Pouco espaco: $livreGB GB livres. O Gadosso Edit precisa de uns 10 GB." }
 Ok "$livreGB GB livres"
 
 Passo "Conferindo Python 3.12, FFmpeg e Node.js"
@@ -73,10 +73,10 @@ if (-not (Tem "npm")) { Falhar "O Node.js nao foi encontrado depois de instalar.
 Ok "Node.js ok"
 
 # ------------------------------------------------------------------ app (do GitHub)
-Passo "Baixando o Clipador do GitHub ($Repo, $Ramo)"
+Passo "Baixando o Gadosso Edit do GitHub ($Repo, $Ramo)"
 New-Item -ItemType Directory -Force $Destino | Out-Null
 $sha = "desconhecida"
-try { $sha = (Invoke-RestMethod "https://api.github.com/repos/$Repo/commits/$Ramo" -Headers @{ "User-Agent" = "Clipador" }).sha } catch { Aviso "Nao consegui ler a versao no GitHub (segue assim mesmo)." }
+try { $sha = (Invoke-RestMethod "https://api.github.com/repos/$Repo/commits/$Ramo" -Headers @{ "User-Agent" = "GadossoEdit" }).sha } catch { Aviso "Nao consegui ler a versao no GitHub (segue assim mesmo)." }
 $zip = Join-Path $env:TEMP "clipador_$([guid]::NewGuid().ToString('N')).zip"
 $tmp = Join-Path $env:TEMP "clipador_$([guid]::NewGuid().ToString('N'))"
 try {
@@ -131,8 +131,8 @@ Passo "Criando o atalho"
 New-Item -ItemType Directory -Force $dados | Out-Null
 & (Join-Path $app "app\criar_atalho.ps1") -Venv $venv -Nome $NomeAtalho | Out-Host
 
-Write-Host "`nPronto! O Clipador esta instalado." -ForegroundColor Green
-Write-Host "Abra pelo atalho 'Clipador' na area de trabalho. Na primeira vez ele pede a sua chave do Claude."
+Write-Host "`nPronto! O Gadosso Edit esta instalado." -ForegroundColor Green
+Write-Host "Abra pelo atalho 'Gadosso Edit' na area de trabalho. Na primeira vez ele pede a sua chave do Claude."
 if (-not $NaoAbrir) {
     Start-Process -FilePath (Join-Path $venv "Scripts\pythonw.exe") -ArgumentList "`"$(Join-Path $app 'app\clipador.pyw')`"" -WorkingDirectory (Join-Path $app "app")
 }

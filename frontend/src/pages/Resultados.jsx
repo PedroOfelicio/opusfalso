@@ -85,7 +85,7 @@ export default function Resultados({ projeto, recarregar, setProjeto }) {
             {projeto.modo === "gameplay" ? "Gameplay" : "Falado"} · vídeo de {formatarDuracao(projeto.duracao_video)} · {prontos} clipe(s)
             {projeto.custo > 0 && <> · US$ {projeto.custo.toFixed(3)}</>}
           </div>
-          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight truncate">{projeto.nome}</h1>
+          <h1 className="text-2xl lg:text-3xl font-semibold tracking-tight truncate">{projeto.nome}</h1>
         </div>
         <div className="flex gap-2">
           <Botao icone={FolderOpen} onClick={() => api.abrirPasta(projeto.id)}>Abrir pasta</Botao>

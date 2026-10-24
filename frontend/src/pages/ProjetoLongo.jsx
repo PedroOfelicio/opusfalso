@@ -58,7 +58,7 @@ export default function ProjetoLongo() {
       </div>
     );
   if (projeto.status !== "pronto" || !projeto.longo)
-    return <Processando projeto={projeto} recarregar={carregar} etapas={ETAPAS_LONGO} voltar={{ para: "/longos", rotulo: "Vídeos longos" }} />;
+    return <Processando projeto={projeto} recarregar={carregar} etapas={ETAPAS_LONGO} voltar={{ para: "/projetos", rotulo: "Projetos" }} />;
   return <Resultado projeto={projeto} recarregar={carregar} />;
 }
 
@@ -103,8 +103,8 @@ function Resultado({ projeto, recarregar }) {
 
   return (
     <div className="max-w-[1300px] mx-auto px-6 lg:px-8 py-8">
-      <Link to="/longos" className="inline-flex items-center gap-1.5 text-sm text-suave hover:text-texto mb-4">
-        <ArrowLeft className="size-4" /> Vídeos longos
+      <Link to="/projetos" className="inline-flex items-center gap-1.5 text-sm text-suave hover:text-texto mb-4">
+        <ArrowLeft className="size-4" /> Projetos
       </Link>
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div className="min-w-0">
@@ -113,7 +113,7 @@ function Resultado({ projeto, recarregar }) {
             {lg.modo_longo === "melhores" ? "Melhores momentos" : "Vídeo inteiro enxugado"}
             {projeto.custo > 0 && <> · US$ {projeto.custo.toFixed(3)} na API</>}
           </div>
-          <h1 className="text-2xl font-extrabold tracking-tight truncate mt-1">{projeto.nome}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight truncate mt-1">{projeto.nome}</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           {projeto.edicao && (
@@ -217,7 +217,7 @@ function Resultado({ projeto, recarregar }) {
             <ol className="space-y-1">
               {lg.capitulos.map((c) => (
                 <li key={c.t}>
-                  <button onClick={() => irPara(c.t)} className="w-full flex gap-3 text-left rounded-lg px-2 py-1.5 hover:bg-white/5 cursor-pointer">
+                  <button onClick={() => irPara(c.t)} className="w-full flex gap-3 text-left rounded-lg px-2 py-1.5 hover:bg-black/[0.05] cursor-pointer">
                     <span className="text-roxo tabular-nums text-sm font-semibold w-14 shrink-0">{tempoYT(c.t)}</span>
                     <span className="text-sm">{c.titulo}</span>
                   </button>
@@ -282,7 +282,7 @@ const COR_MOTIVO = {
   "desvio de assunto": "bg-azul/15 text-azul",
   bastidor: "bg-roxo/15 text-roxo",
   "pedido do usuário": "bg-verde/15 text-verde",
-  "tela preta": "bg-white/10 text-suave",
+  "tela preta": "bg-black/[0.06] text-suave",
 };
 const RITMOS = [
   { valor: "natural", rotulo: "Natural" },
@@ -364,7 +364,7 @@ function Revisao({ projeto, recarregar }) {
             <div className="text-xs text-suave mt-1">Trecho do vídeo original, com 1 s antes e depois.</div>
             {previa.texto && <p className="text-sm text-suave mt-2">“{previa.texto}”</p>}
           </div>
-          <button onClick={() => setPrevia(null)} className="p-1.5 rounded-lg text-suave hover:text-texto hover:bg-white/5 cursor-pointer" aria-label="Fechar prévia">
+          <button onClick={() => setPrevia(null)} className="p-1.5 rounded-lg text-suave hover:text-texto hover:bg-black/[0.05] cursor-pointer" aria-label="Fechar prévia">
             <X className="size-4" />
           </button>
         </div>
@@ -383,7 +383,7 @@ function Revisao({ projeto, recarregar }) {
               <div className="flex-1">
                 <Alternador ativo={estado.abertura} aoMudar={(v) => setEstado((e) => ({ ...e, abertura: v }))} rotulo="Abrir com o melhor momento" descricao={`Teaser de ${Math.round(edl.abertura[1] - edl.abertura[0])} s antes de começar`} />
               </div>
-              <button onClick={() => setPrevia({ inicio: edl.abertura[0], fim: edl.abertura[1], rotulo: "Abertura" })} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-white/5 cursor-pointer" aria-label="Ver a abertura">
+              <button onClick={() => setPrevia({ inicio: edl.abertura[0], fim: edl.abertura[1], rotulo: "Abertura" })} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-black/[0.05] cursor-pointer" aria-label="Ver a abertura">
                 <Play className="size-4" />
               </button>
             </div>
@@ -412,7 +412,7 @@ function Revisao({ projeto, recarregar }) {
                     <div key={m.id} className={`flex items-center gap-2 ${ok ? "" : "opacity-50"}`}>
                       <input type="checkbox" checked={ok} onChange={(e) => mudar("momentos", m.id, "manter", e.target.checked)} className="accent-roxo size-4 cursor-pointer" />
                       <input value={estado.momentos[m.id]?.titulo ?? ""} onChange={(e) => mudar("momentos", m.id, "titulo", e.target.value)} className="campo !py-1.5 text-sm" />
-                      <button onClick={() => setPrevia({ inicio: m.inicio, fim: Math.min(m.fim, m.inicio + 90), rotulo: m.titulo })} className="p-1.5 rounded-lg text-suave hover:text-texto hover:bg-white/5 cursor-pointer" aria-label="Ver momento">
+                      <button onClick={() => setPrevia({ inicio: m.inicio, fim: Math.min(m.fim, m.inicio + 90), rotulo: m.titulo })} className="p-1.5 rounded-lg text-suave hover:text-texto hover:bg-black/[0.05] cursor-pointer" aria-label="Ver momento">
                         <Play className="size-4" />
                       </button>
                     </div>
@@ -458,7 +458,7 @@ function Revisao({ projeto, recarregar }) {
                         </div>
                         {r.texto && <p className="text-sm text-suave mt-1 line-clamp-2">“{r.texto}”</p>}
                       </div>
-                      <button onClick={() => setPrevia({ inicio: r.inicio, fim: r.fim, rotulo: r.motivo, texto: r.texto })} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-white/5 cursor-pointer shrink-0" aria-label="Ver trecho">
+                      <button onClick={() => setPrevia({ inicio: r.inicio, fim: r.fim, rotulo: r.motivo, texto: r.texto })} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-black/[0.05] cursor-pointer shrink-0" aria-label="Ver trecho">
                         <Play className="size-4" />
                       </button>
                       <button

@@ -1,24 +1,31 @@
 @import "tailwindcss";
 
-/* Identidade visual: tudo que é cor/fonte/raio fica aqui */
+/*
+ * Identidade visual do Gadosso Edit: a mesma linguagem do Gadosso CRM.
+ * Paleta monocromática (cinza-gelo #F4F4F6, cartões brancos, preto como cor de ação); as cores só aparecem
+ * em indicadores de status. Outfit no texto (geométrica e arredondada como a logo) e DM Mono nos rótulos.
+ * Os nomes dos tokens são os de antes (roxo, gradiente...) para não mexer em todas as telas: "roxo" agora é
+ * o preto de ação e "gradiente" é o preto sólido do botão principal.
+ */
 @theme {
-  --color-fundo: #0b0b0f;
-  --color-card: #15151c;
-  --color-card-2: #1b1b24;
-  --color-borda: #26262f;
-  --color-borda-forte: #34343f;
-  --color-texto: #ededf2;
-  --color-suave: #9a9aab;
-  --color-apagado: #6b6b7b;
-  --color-roxo: #7c3aed;
-  --color-azul: #3b82f6;
-  --color-verde: #22c55e;
-  --color-amarelo: #eab308;
-  --color-vermelho: #ef4444;
-  --font-sans: "Plus Jakarta Sans Variable", "Inter", system-ui, sans-serif;
+  --color-fundo: #f4f4f6;
+  --color-card: #ffffff;
+  --color-card-2: #f4f4f6;
+  --color-borda: #e6e6ea;
+  --color-borda-forte: #cfcfd5;
+  --color-texto: #0a0a0a;
+  --color-suave: #6e6e73;
+  --color-apagado: #9a9aa0;
+  --color-roxo: #0a0a0a;
+  --color-azul: #2f6db5;
+  --color-verde: #1f9d63;
+  --color-amarelo: #b7861b;
+  --color-vermelho: #d33a3f;
+  --font-sans: "Outfit Variable", "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
   --radius-card: 16px;
-  --shadow-suave: 0 8px 30px rgb(0 0 0 / 0.35);
-  --animate-surgir: surgir 0.35s ease-out both;
+  --shadow-suave: 0 10px 30px -22px rgb(0 0 0 / 0.35);
+  --animate-surgir: surgir 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-brilho: brilho 1.6s ease-in-out infinite;
 
   @keyframes surgir {
@@ -39,26 +46,36 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
-  ::selection { background: rgb(124 58 237 / 0.45); }
-  input, textarea, select { color-scheme: dark; }
-  * { scrollbar-width: thin; scrollbar-color: #34343f transparent; }
+  h1, h2, h3 { letter-spacing: -0.01em; }
+  ::selection { background: rgb(0 0 0 / 0.12); }
+  input, textarea, select { color-scheme: light; }
+  * { scrollbar-width: thin; scrollbar-color: #cfcfd5 transparent; }
+  :focus-visible { outline: 2px solid #0a0a0a; outline-offset: 2px; }
 }
 
 @layer components {
-  .gradiente { background-image: linear-gradient(135deg, var(--color-roxo), var(--color-azul)); }
-  .texto-gradiente {
-    background-image: linear-gradient(135deg, #a78bfa, #60a5fa);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+  /* "gradiente" = o botão/realce principal: preto sólido, como o "Entrar" do CRM */
+  .gradiente { background-color: #0a0a0a; color: #fff; }
+  .texto-gradiente { color: #0a0a0a; }
+  /* o cartão do CRM: branco sobre o cinza-gelo, borda quase invisível e sombra baixa */
+  .cartao {
+    background: #fff; border: 1px solid rgb(0 0 0 / 0.06); border-radius: var(--radius-card);
+    box-shadow: 0 10px 30px -22px rgb(0 0 0 / 0.35);
   }
-  .cartao { background: var(--color-card); border: 1px solid var(--color-borda); border-radius: var(--radius-card); }
   .campo {
-    width: 100%; background: var(--color-fundo); border: 1px solid var(--color-borda); border-radius: 12px;
+    width: 100%; background: #fff; border: 1px solid rgb(0 0 0 / 0.12); border-radius: 12px;
     padding: 0.6rem 0.8rem; font-size: 0.875rem; outline: none; transition: border-color .15s, box-shadow .15s;
   }
-  .campo:focus { border-color: var(--color-roxo); box-shadow: 0 0 0 3px rgb(124 58 237 / 0.2); }
+  .campo:focus { border-color: #0a0a0a; box-shadow: 0 0 0 3px rgb(0 0 0 / 0.08); }
+  .campo::placeholder { color: #9a9aa0; }
   .esqueleto {
-    background: linear-gradient(90deg, #1b1b24 0%, #262630 50%, #1b1b24 100%);
+    background: linear-gradient(90deg, #ececf0 0%, #f7f7f9 50%, #ececf0 100%);
     background-size: 200% 100%; animation: var(--animate-brilho); border-radius: 12px;
   }
-  .rotulo { font-size: 0.75rem; font-weight: 600; color: var(--color-suave); text-transform: uppercase; letter-spacing: .06em; }
+  /* rótulo técnico do CRM: mono, maiúsculo e espaçado */
+  .rotulo {
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; color: rgb(0 0 0 / 0.45);
+    text-transform: uppercase; letter-spacing: 0.16em;
+  }
+  .rotulo-mono { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.16em; }
 }

@@ -84,7 +84,7 @@ export default function Processando({ projeto, recarregar, etapas, voltar = { pa
             <>
               <div className="flex items-end justify-between mb-2">
                 <div>
-                  <div className="text-3xl font-extrabold tabular-nums">{pct}%</div>
+                  <div className="text-3xl font-semibold tabular-nums">{pct}%</div>
                   <div className="text-sm text-suave">
                     {projeto.status === "fila" ? `Na fila${projeto.fila_pendentes ? ` (${projeto.fila_pendentes} antes)` : ""}…` : formatarRestante(projeto.restante_s)}
                   </div>

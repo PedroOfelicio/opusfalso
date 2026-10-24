@@ -4,13 +4,13 @@ import { AlertTriangle, CheckCircle2, Info, Loader2, RefreshCw, X } from "lucide
 
 export function Botao({ variante = "secundario", tamanho = "md", carregando, icone: Icone, children, className = "", ...props }) {
   const base =
-    "inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-all duration-150 " +
+    "inline-flex items-center justify-center gap-2 font-medium rounded-full transition-all duration-150 " +
     "disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-roxo/60 cursor-pointer";
   const tamanhos = { sm: "text-xs px-3 py-1.5", md: "text-sm px-4 py-2.5", lg: "text-base px-6 py-3.5" };
   const variantes = {
-    primario: "gradiente text-white shadow-[0_8px_24px_-8px_rgba(124,58,237,0.7)] hover:brightness-110 active:scale-[0.98]",
-    secundario: "bg-card-2 border border-borda hover:border-borda-forte hover:bg-[#20202a] text-texto",
-    fantasma: "text-suave hover:text-texto hover:bg-white/5",
+    primario: "gradiente text-white hover:bg-black/85 active:scale-[0.98]",
+    secundario: "bg-white border border-black/10 hover:border-black/25 text-texto",
+    fantasma: "text-suave hover:text-texto hover:bg-black/[0.05]",
     perigo: "bg-vermelho/10 text-vermelho border border-vermelho/30 hover:bg-vermelho/20",
   };
   return (
@@ -139,7 +139,7 @@ export function Dica({ texto, children, lado = "baixo" }) {
     <span className="relative group/dica inline-flex">
       {children}
       <span
-        className={`pointer-events-none absolute ${pos} right-0 z-30 w-60 rounded-xl bg-[#0f0f15] border border-borda-forte px-3 py-2 text-xs leading-relaxed text-texto shadow-suave opacity-0 translate-y-1 group-hover/dica:opacity-100 group-hover/dica:translate-y-0 transition-all`}
+        className={`pointer-events-none absolute ${pos} right-0 z-30 w-60 rounded-xl bg-white border border-black/10 px-3 py-2 text-xs leading-relaxed text-texto shadow-suave opacity-0 translate-y-1 group-hover/dica:opacity-100 group-hover/dica:translate-y-0 transition-all`}
       >
         {texto}
       </span>

@@ -1,5 +1,5 @@
 """
-Gera os ícones do Clipador em alta qualidade a partir de um desenho em 1024 px (bordas suaves):
+Gera os ícones do Gadosso Edit em alta qualidade a partir de um desenho em 1024 px (bordas suaves):
   app/icone.ico                (atalho e bandeja: 16 a 256 px, cada tamanho reduzido com LANCZOS)
   app/icone_bandeja.png        (64 px, já reduzido: o pystray encolheria mal o de 256)
   frontend/public/icone-*.png  (janela/barra de tarefas: favicons e ícones do manifesto)
@@ -56,7 +56,9 @@ def reduzir(img: Image.Image, lado: int) -> Image.Image:
 
 
 def main():
-    mestre = desenhar()
+    # Gadosso Edit: o "g" da marca Gadosso (app/icone_marca.png, 512 px); sem ele, o desenho antigo do play
+    marca = RAIZ / "app" / "icone_marca.png"
+    mestre = Image.open(marca).convert("RGBA") if marca.exists() else desenhar()
     tamanhos = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
     imagens = [reduzir(mestre, t) for t in tamanhos]
     imagens[-1].save(RAIZ / "app" / "icone.ico", format="ICO", sizes=[(t, t) for t in tamanhos],

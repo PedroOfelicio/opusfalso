@@ -1,4 +1,4 @@
-# Clipador — editor de vídeo local com IA
+# Gadosso Edit — editor de vídeo com IA (antes "Clipador")
 
 Ferramenta **pessoal e local** que transforma vídeos longos (podcast, aula, talking head, gameplay)
 em clipes curtos prontos para TikTok, Reels e Shorts. Ela gera legenda palavra por palavra,

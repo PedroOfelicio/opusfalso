@@ -11,7 +11,7 @@ const STATUS = {
   processando: { rotulo: "Processando", cor: "bg-azul/15 text-azul" },
   fila: { rotulo: "Na fila", cor: "bg-azul/15 text-azul" },
   erro: { rotulo: "Erro", cor: "bg-vermelho/15 text-vermelho" },
-  cancelado: { rotulo: "Cancelado", cor: "bg-white/10 text-suave" },
+  cancelado: { rotulo: "Cancelado", cor: "bg-black/[0.06] text-suave" },
 };
 const FILTROS = { todos: "Todos", pronto: "Prontos", processando: "Processando", erro: "Com erro", cancelado: "Cancelados" };
 
@@ -22,6 +22,7 @@ export default function Projetos() {
   const [erro, setErro] = useState(null);
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState("todos");
+  const [tipo, setTipo] = useState("todos"); // todos | curto | longo
   const [excluindo, setExcluindo] = useState(null);
   const [apagarSaida, setApagarSaida] = useState(false);
 
@@ -40,9 +41,10 @@ export default function Projetos() {
     return lista.filter(
       (p) =>
         (filtro === "todos" || p.status === filtro || (filtro === "processando" && p.status === "fila")) &&
+        (tipo === "todos" || (p.tipo || "curto") === tipo) &&
         (!termo || p.nome.toLowerCase().includes(termo)),
     );
-  }, [lista, busca, filtro]);
+  }, [lista, busca, filtro, tipo]);
 
   const excluir = async () => {
     const p = excluindo;
@@ -60,7 +62,7 @@ export default function Projetos() {
     <div className="max-w-[1400px] mx-auto px-6 lg:px-8 py-8">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Meus projetos</h1>
+          <h1 className="text-2xl lg:text-3xl font-semibold tracking-tight">Meus projetos</h1>
           <p className="text-sm text-suave mt-1">{lista ? `${lista.length} projeto(s)` : "Carregando…"}</p>
         </div>
         <Botao variante="primario" icone={Plus} onClick={() => navegar("/")}>Novo projeto</Botao>
@@ -70,6 +72,11 @@ export default function Projetos() {
         <div className="relative flex-1 min-w-60 max-w-md">
           <Search className="size-4 text-apagado absolute left-3 top-1/2 -translate-y-1/2" />
           <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar projeto…" className="campo !pl-9" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {[["todos", "Todos os tipos"], ["curto", "Clipes curtos"], ["longo", "Vídeos longos"]].map(([k, r]) => (
+            <Chip key={k} ativo={tipo === k} onClick={() => setTipo(k)}>{r}</Chip>
+          ))}
         </div>
         <div className="flex flex-wrap gap-2">
           {Object.entries(FILTROS).map(([k, r]) => (

@@ -158,7 +158,7 @@ export default function Editor() {
     <div className="h-full flex flex-col">
       {/* Barra superior */}
       <header className="h-16 shrink-0 border-b border-borda px-6 flex items-center gap-4">
-        <Link to={`/projetos/${id}`} className="p-2 -ml-2 rounded-lg text-suave hover:text-texto hover:bg-white/5"><ArrowLeft className="size-5" /></Link>
+        <Link to={`/projetos/${id}`} className="p-2 -ml-2 rounded-lg text-suave hover:text-texto hover:bg-black/[0.05]"><ArrowLeft className="size-5" /></Link>
         <div className="min-w-0 flex-1">
           <div className="text-xs text-suave">{projeto.nome} · {clip.id.replace("_", " ")}</div>
           <div className="font-semibold truncate">{rascunho.titulo || "Sem título"}</div>
@@ -246,7 +246,7 @@ export default function Editor() {
         </section>
 
         {/* Painel lateral */}
-        <aside className="min-h-0 border-l border-borda flex flex-col bg-[#0d0d12]">
+        <aside className="min-h-0 border-l border-borda flex flex-col bg-white">
           <nav className="flex border-b border-borda px-2 shrink-0">
             {ABAS.map(({ id: a, rotulo, icone: Icone }) => (
               <button
@@ -351,7 +351,7 @@ export default function Editor() {
                           onClick={() => setEditandoPalavra(w.chave)}
                           title={`${w.i.toFixed(2)}s · deixe vazio para remover`}
                           className={`px-1.5 py-0.5 rounded-md text-xs transition-colors cursor-pointer ${
-                            ativa ? "gradiente text-white" : removida ? "line-through text-apagado" : editada != null ? "bg-amarelo/15 text-amarelo" : "hover:bg-white/10"
+                            ativa ? "gradiente text-white" : removida ? "line-through text-apagado" : editada != null ? "bg-amarelo/15 text-amarelo" : "hover:bg-black/[0.08]"
                           }`}
                         >
                           {removida ? w.original : texto}

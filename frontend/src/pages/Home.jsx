@@ -1,89 +1,79 @@
-// Tela inicial: envio do vídeo + instrução + opções rápidas.
+// Início: o vídeo (link, caminho ou arquivo) e o que fazer com ele: clipes curtos ou vídeo longo.
+// O essencial fica à vista; o resto, em "Mais opções".
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import {
-  AudioLines, Check, ChevronDown, FileVideo, FolderInput, Gamepad2, LayoutTemplate, Mic, Music, RectangleHorizontal, RectangleVertical,
-  Save, SlidersHorizontal, Sparkles, Square, Trash2, Upload, Wand2, X, ZoomIn,
-} from "lucide-react";
-import PreviewLegenda from "../components/PreviewLegenda";
-import { api, CLIMAS, criarProjeto, formatarBytes, formatarData } from "../api";
+import { ChevronDown, FileVideo, Film, Gamepad2, Mic, Scissors, Smartphone, Sparkles, Trophy, Upload, X } from "lucide-react";
+import { api, CLIMAS, criarLongo, criarProjeto, formatarBytes } from "../api";
 import { Alternador, Aviso, Botao, Chip, Segmentado, useAvisar } from "../components/ui";
 
-const EXEMPLOS = [
-  "5 melhores momentos",
-  "legenda amarela",
-  "legenda animada",
-  "zoom nas partes importantes",
-  "remover silêncios",
-  "música energética",
-  "efeitos sonoros",
-  "zoom nas kills",
-  "título chamativo",
-];
+const EXTENSOES = [".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"];
 const DURACOES = { "15-30s": [15, 30], "30-60s": [30, 60], "60-90s": [60, 90] };
-const FORMATOS = [
-  { valor: "9:16", rotulo: "9:16", icone: RectangleVertical },
-  { valor: "1:1", rotulo: "1:1", icone: Square },
-  { valor: "16:9", rotulo: "16:9", icone: RectangleHorizontal },
-];
-const EXTENSOES = [".mp4", ".mov", ".mkv", ".webm", ".m4v"];
+const ALVOS = [3, 5, 10, 15, 20];
+const IDIOMAS = { "": "Mesmo idioma do vídeo", en: "Inglês", es: "Espanhol", pt: "Português", fr: "Francês", it: "Italiano", de: "Alemão" };
 
 export default function Home() {
   const navegar = useNavigate();
   const avisar = useAvisar();
   const [parametros] = useSearchParams();
   const entradaArquivo = useRef(null);
+
+  // vídeo
   const [arquivo, setArquivo] = useState(null);
   const [caminho, setCaminho] = useState("");
-  const [usarCaminho, setUsarCaminho] = useState(false);
   const [arrastando, setArrastando] = useState(false);
-  const [instrucao, setInstrucao] = useState("");
+  // o que fazer
+  const [tipo, setTipo] = useState("curto"); // curto | longo
   const [modo, setModo] = useState("falado");
-  const [numClips, setNumClips] = useState(3);
+  const [instrucao, setInstrucao] = useState("");
+  const [maisOpcoes, setMaisOpcoes] = useState(false);
+  // clipes curtos
+  const [numClips, setNumClips] = useState(5);
   const [duracao, setDuracao] = useState("30-60s");
+  const [preset, setPreset] = useState("gamer");
+  const [animada, setAnimada] = useState(true);
   const [formato, setFormato] = useState("9:16");
-  const [preset, setPreset] = useState("opus");
-  const [animada, setAnimada] = useState(false);
-  const [avancado, setAvancado] = useState(false);
   const [layout, setLayout] = useState("auto");
-  const [musica, setMusica] = useState(""); // "" | "auto" | clima | "arquivo"
-  const [musicaArquivo, setMusicaArquivo] = useState("");
-  const [efeitos, setEfeitos] = useState(false);
-  const [audio, setAudio] = useState(null);
-  const [cor, setCor] = useState(null);
-  const [zoom, setZoom] = useState(false);
-  const [silencios, setSilencios] = useState(false);
+  const [idiomaLegenda, setIdiomaLegenda] = useState("");
   const [titulo, setTitulo] = useState(true);
-  const [barra, setBarra] = useState(null); // null = padrão do estilo de legenda
-  const [abertura, setAbertura] = useState(true);
-  const [diretor, setDiretor] = useState(true); // o Claude varia o visual de cada clipe
-  const [broll, setBroll] = useState(true);       // vídeos de apoio do Pixabay/Pexels (só na fala)
-  const [reacoes, setReacoes] = useState(true);   // "ESPERA...", "KKKK" no pico
-  const [idiomaLegenda, setIdiomaLegenda] = useState(""); // "" = idioma da fala
-  const [limparVoz, setLimparVoz] = useState(null); // null = automático (fala sim, gameplay não)
-  const [templates, setTemplates] = useState({});
-  const [template, setTemplate] = useState(null);
+  const [silencios, setSilencios] = useState(true);
+  const [reacoes, setReacoes] = useState(true);
+  const [diretor, setDiretor] = useState(true);
   const [apoio, setApoio] = useState("");
+  // vídeo longo
+  const [modoLongo, setModoLongo] = useState("enxugar");
+  const [alvo, setAlvo] = useState(10);
+  const [ritmo, setRitmo] = useState("dinamico");
+  const [removerErros, setRemoverErros] = useState(true);
+  const [cortarParado, setCortarParado] = useState(true);
+  const [legendaLonga, setLegendaLonga] = useState(false);
+  // comuns
+  const [musica, setMusica] = useState("");
+  const [efeitos, setEfeitos] = useState(true);
+  const [zoom, setZoom] = useState(true);
+  const [abertura, setAbertura] = useState(true);
+  const [broll, setBroll] = useState(true);
   const [verImagens, setVerImagens] = useState(true);
+  const [limparVoz, setLimparVoz] = useState(null); // null = automático (fala sim, gameplay não)
+
   const [estilos, setEstilos] = useState({});
-  const [sistema, setSistema] = useState(null);
-  const [recentes, setRecentes] = useState([]);
-  const [enviando, setEnviando] = useState(null); // progresso do upload 0-1
+  const [audio, setAudio] = useState(null);
+  const [enviando, setEnviando] = useState(null); // progresso do envio 0-1
 
   useEffect(() => {
     api.estilos().then(setEstilos).catch(() => {});
-    api.sistema().then(setSistema).catch(() => {});
     api.audio().then(setAudio).catch(() => {});
-    api.templates().then(setTemplates).catch(() => {});
-    api.projetos().then((p) => setRecentes(p.slice(0, 4))).catch(() => {});
   }, []);
+  useEffect(() => {
+    const ids = Object.keys(estilos);
+    if (ids.length && !estilos[preset]) setPreset(ids[0]);
+  }, [estilos, preset]);
 
-  // Vindo de um vídeo longo ("Gerar clipes curtos"): já abre com o mesmo arquivo (a transcrição está em cache)
+  // Vindo de um vídeo longo ("Gerar clipes curtos"): já abre com o mesmo vídeo (a transcrição está em cache)
   useEffect(() => {
     const c = parametros.get("caminho");
     if (c) {
-      setUsarCaminho(true);
       setCaminho(c);
+      setTipo("curto");
     }
     const m = parametros.get("modo");
     if (m === "falado" || m === "gameplay") setModo(m);
@@ -94,298 +84,149 @@ export default function Home() {
     const ext = f.name.slice(f.name.lastIndexOf(".")).toLowerCase();
     if (!EXTENSOES.includes(ext)) return avisar(`Formato não suportado: ${ext}`, "erro");
     setArquivo(f);
-    setUsarCaminho(false);
+    setCaminho("");
   };
 
-  // Estilo padrão apagado (ex.: "opus"): usa o primeiro que existir
-  useEffect(() => {
-    const ids = Object.keys(estilos);
-    if (ids.length && !estilos[preset]) setPreset(ids[0]);
-  }, [estilos, preset]);
-
-  const aplicarTemplate = (id) => {
-    const t = templates[id];
-    setTemplate(id);
-    if (!t) return;
-    setDiretor(false); // template = visual fixo escolhido por você
-    if (t.modo) setModo(t.modo);
-    setPreset(t.preset);
-    setCor(t.cor || null);
-    setAnimada(!!t.animada);
-    setFormato(t.formato);
-    setLayout(t.layout);
-    const chave = Object.keys(DURACOES).find((k) => DURACOES[k][0] === t.duracao[0] && DURACOES[k][1] === t.duracao[1]);
-    if (chave) setDuracao(chave);
-    setTitulo(t.titulo);
-    setBarra(t.barra ?? null);
-    setZoom(!!t.zoom);
-    setSilencios(!!t.remover_silencios);
-    setMusica(t.musica || "");
-    setEfeitos(!!t.efeitos);
-    setAbertura(t.abertura ?? true);
-  };
-
-  const salvarComoTemplate = async () => {
-    const nome = window.prompt("Nome do template:", template && templates[template] ? `${templates[template].nome} (meu)` : "Meu template");
-    if (!nome?.trim()) return;
-    const id = nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30).padEnd(2, "_") || "template";
-    try {
-      const lista = await api.salvarTemplate(id, {
-        nome: nome.trim().slice(0, 40), descricao: "Criado a partir das opções atuais", modo, preset, cor, animada, formato, layout,
-        duracao: DURACOES[duracao], titulo, barra, zoom, remover_silencios: silencios,
-        musica: musica === "arquivo" ? "" : musica, efeitos, abertura,
-      });
-      setTemplates(lista);
-      setTemplate(id);
-      avisar("Template salvo");
-    } catch (e) {
-      avisar(e.message, "erro");
-    }
-  };
-
-  const excluirTemplate = async (id) => {
-    if (!window.confirm(`Excluir o template "${templates[id]?.nome}"?`)) return;
-    try {
-      setTemplates(await api.excluirTemplate(id));
-      if (template === id) setTemplate(null);
-    } catch (e) {
-      avisar(e.message, "erro");
-    }
-  };
-
-  const adicionarExemplo = (texto) =>
-    setInstrucao((atual) => (atual.trim() ? `${atual.trim().replace(/[,.]$/, "")}, ${texto}` : texto));
-
-  const pronto = usarCaminho ? caminho.trim().length > 3 : !!arquivo;
-
-  // Muitos clipes (lives longas): a legenda simples renderiza ~4x mais rápido que a animada
   const mudarNumClips = (n) => {
     const novo = Math.max(1, Math.min(100, n));
     if (novo > 20 && numClips <= 20 && animada) {
       setAnimada(false);
-      avisar("Com muitos clipes, troquei para a legenda simples (renderiza ~4x mais rápido). Dá para voltar nas opções.");
+      avisar("Com muitos clipes, troquei para a legenda simples (renderiza ~4x mais rápido). Dá para voltar em Mais opções.");
     }
     setNumClips(novo);
   };
 
-  const gerar = useCallback(async () => {
+  const link = /^\s*https?:\/\//.test(caminho);
+  const pronto = !!arquivo || caminho.trim().length > 3;
+
+  const enviar = useCallback(async () => {
     if (!pronto || enviando !== null) return;
     setEnviando(0);
+    const base = { arquivo, caminho: arquivo ? "" : caminho, instrucao, modo };
     try {
-      const projeto = await criarProjeto(
-        {
-          arquivo: usarCaminho ? null : arquivo,
-          caminho,
-          instrucao,
-          modo,
+      if (tipo === "curto") {
+        const p = await criarProjeto({
+          ...base,
           opcoes: {
-            num_clips: numClips, duracao: DURACOES[duracao], formato, preset,
-            estilo_legenda: animada ? "animada" : "simples", layout, cor, template,
-            zoom, remover_silencios: silencios, titulo, barra, abertura, limpar_voz: limparVoz,
-            musica: musica === "arquivo" ? musicaArquivo.trim() : musica, efeitos_sonoros: efeitos,
-            video_apoio: apoio || null, ver_imagens: verImagens, diretor, broll, reacoes, idioma_legenda: idiomaLegenda,
+            num_clips: numClips, duracao: DURACOES[duracao], formato, preset, estilo_legenda: animada ? "animada" : "simples",
+            layout, zoom, remover_silencios: silencios, titulo, abertura, limpar_voz: limparVoz,
+            musica, efeitos_sonoros: efeitos, video_apoio: apoio || null, ver_imagens: verImagens,
+            diretor, broll, reacoes, idioma_legenda: idiomaLegenda,
           },
-        },
-        setEnviando,
-      );
-      navegar(`/projetos/${projeto.id}`);
+        }, setEnviando);
+        navegar(`/projetos/${p.id}`);
+      } else {
+        const p = await criarLongo({
+          ...base,
+          opcoes: {
+            modo_longo: modoLongo, alvo_min: alvo, abertura, zoom, legenda: legendaLonga, preset, efeitos, musica,
+            ver_imagens: verImagens, cortar_parado: cortarParado, remover_erros: removerErros, diretor, broll,
+            ritmo, limpar_voz: limparVoz,
+          },
+        }, setEnviando);
+        navegar(`/longos/${p.id}`);
+      }
     } catch (e) {
       avisar(e.message, "erro");
       setEnviando(null);
     }
-  }, [pronto, enviando, usarCaminho, arquivo, caminho, instrucao, modo, numClips, duracao, formato, preset, animada, layout, musica, musicaArquivo, efeitos, cor, template, zoom, silencios, titulo, barra, abertura, limparVoz, apoio, verImagens, diretor, broll, reacoes, idiomaLegenda, navegar, avisar]);
+  }, [pronto, enviando, arquivo, caminho, instrucao, modo, tipo, numClips, duracao, formato, preset, animada, layout, zoom, silencios, titulo, abertura, limparVoz, musica, efeitos, apoio, verImagens, diretor, broll, reacoes, idiomaLegenda, modoLongo, alvo, legendaLonga, cortarParado, removerErros, ritmo, navegar, avisar]);
 
-  // Ctrl+Enter = gerar
+  // Ctrl+Enter = começar
   useEffect(() => {
     const tecla = (e) => {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        gerar();
+        enviar();
       }
     };
     window.addEventListener("keydown", tecla);
     return () => window.removeEventListener("keydown", tecla);
-  }, [gerar]);
+  }, [enviar]);
+
+  const semMusicas = audio && Object.values(audio.musicas).every((l) => !l.length);
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12 lg:py-16">
-      <div className="text-center mb-10 animate-surgir">
-        <div className="inline-flex items-center gap-2 text-xs font-semibold text-suave border border-borda bg-card rounded-full px-3 py-1 mb-5">
-          <Sparkles className="size-3.5 text-roxo" /> Tudo roda no seu computador
-        </div>
-        <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight">
-          O que vamos <span className="texto-gradiente">criar hoje?</span>
-        </h1>
-        <p className="text-suave mt-3">Envie um vídeo longo e descreva o que você quer. A IA encontra os melhores momentos.</p>
+    <div className="max-w-3xl mx-auto px-6 py-10 lg:py-14">
+      <div className="text-center mb-8 animate-surgir">
+        <p className="rotulo-mono text-black/45">Edição com IA · roda no seu computador</p>
+        <h1 className="text-4xl lg:text-5xl font-light tracking-[-0.03em] mt-3">O que vamos editar hoje?</h1>
       </div>
 
-      {sistema && !sistema.tem_chave && (
-        <div className="mb-5">
-          <Aviso tipo="alerta" titulo="Chave da API não configurada">
-            Sem a chave, a seleção de trechos usa o planejador local (mais simples).{" "}
-            <Link to="/configuracoes" className="underline">Configurar</Link>
-          </Aviso>
-        </div>
-      )}
-
-      <div className="cartao p-2 shadow-suave">
-        {/* Área de envio */}
-        {!usarCaminho ? (
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setArrastando(true);
-            }}
-            onDragLeave={() => setArrastando(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setArrastando(false);
-              escolherArquivo(e.dataTransfer.files?.[0]);
-            }}
-            onClick={() => !arquivo && entradaArquivo.current?.click()}
-            className={`rounded-xl border-2 border-dashed transition-all px-6 ${arquivo ? "py-5 border-borda cursor-default" : "py-10 cursor-pointer"} ${
-              arrastando ? "border-roxo bg-roxo/10" : "border-borda hover:border-borda-forte hover:bg-white/[0.02]"
-            }`}
-          >
-            <input ref={entradaArquivo} type="file" accept={EXTENSOES.join(",")} className="hidden" onChange={(e) => escolherArquivo(e.target.files?.[0])} />
-            {arquivo ? (
-              <div className="flex items-center gap-4">
-                <div className="size-12 rounded-xl gradiente flex items-center justify-center shrink-0">
-                  <FileVideo className="size-6 text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate">{arquivo.name}</div>
-                  <div className="text-xs text-suave">{formatarBytes(arquivo.size)}</div>
-                </div>
-                <button onClick={() => setArquivo(null)} className="p-2 rounded-lg text-suave hover:text-texto hover:bg-white/5 cursor-pointer" aria-label="Remover">
-                  <X className="size-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center text-center">
-                <div className="size-14 rounded-2xl bg-card-2 border border-borda flex items-center justify-center mb-4">
-                  <Upload className="size-6 text-roxo" />
-                </div>
-                <div className="font-semibold">Arraste seu vídeo aqui</div>
-                <div className="text-sm text-suave mt-1">ou clique para escolher · MP4, MOV, MKV</div>
-              </div>
-            )}
+      {/* 1. O vídeo */}
+      <div
+        className={`cartao p-5 transition-colors ${arrastando ? "ring-2 ring-black" : ""}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setArrastando(true);
+        }}
+        onDragLeave={() => setArrastando(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setArrastando(false);
+          escolherArquivo(e.dataTransfer.files?.[0]);
+        }}
+      >
+        <div className="rotulo mb-3">1 · O vídeo</div>
+        <input ref={entradaArquivo} type="file" accept={EXTENSOES.join(",")} className="hidden" onChange={(e) => escolherArquivo(e.target.files?.[0])} />
+        {arquivo ? (
+          <div className="flex items-center gap-4 rounded-xl border border-black/10 p-3">
+            <div className="size-11 rounded-xl gradiente flex items-center justify-center shrink-0"><FileVideo className="size-5" /></div>
+            <div className="flex-1 min-w-0">
+              <div className="font-medium truncate">{arquivo.name}</div>
+              <div className="text-xs text-suave">{formatarBytes(arquivo.size)}</div>
+            </div>
+            <button onClick={() => setArquivo(null)} className="p-2 rounded-full text-suave hover:text-texto hover:bg-black/[0.05] cursor-pointer" aria-label="Remover">
+              <X className="size-4" />
+            </button>
           </div>
         ) : (
-          <div className="p-3">
-            <label className="rotulo">Link do YouTube ou caminho no seu computador</label>
-            <input
-              autoFocus
-              value={caminho}
-              onChange={(e) => setCaminho(e.target.value)}
-              placeholder="https://youtube.com/watch?v=...  ou  C:\Users\voce\Videos\live.mp4"
-              className="campo mt-2 font-mono text-[13px]"
-            />
+          <>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                value={caminho}
+                onChange={(e) => setCaminho(e.target.value)}
+                placeholder="Cole o link do YouTube ou o caminho do vídeo no PC"
+                className="campo font-mono text-[13px] flex-1"
+              />
+              <Botao icone={Upload} onClick={() => entradaArquivo.current?.click()}>Escolher arquivo</Botao>
+            </div>
             <p className="text-xs text-apagado mt-2">
-              {/^\s*https?:\/\//.test(caminho)
-                ? "O vídeo é baixado (até 1080p), processado e apagado no fim: só os clipes ficam no seu PC. Para editar depois, ele é baixado de novo sozinho."
-                : "O arquivo não é copiado: o processamento lê direto de onde ele está."}
+              {link
+                ? "Link: o vídeo é baixado (até 1080p), editado e o original é apagado no fim. Só o resultado fica no seu PC."
+                : "Também dá para arrastar o arquivo para cá. Caminho local não é copiado: é lido direto de onde está."}
             </p>
-          </div>
+          </>
         )}
-        <div className="flex justify-center py-2">
-          <button onClick={() => setUsarCaminho(!usarCaminho)} className="text-xs text-suave hover:text-texto inline-flex items-center gap-1.5 cursor-pointer">
-            <FolderInput className="size-3.5" />
-            {usarCaminho ? "Enviar arquivo em vez disso" : "Ou colar um link do YouTube ou um caminho local"}
-          </button>
-        </div>
-
-        {/* Instrução */}
-        <div className="px-3 pb-3">
-          <textarea
-            value={instrucao}
-            onChange={(e) => setInstrucao(e.target.value)}
-            rows={3}
-            placeholder='Ex.: "5 melhores momentos, vertical, legenda amarela, zoom nas partes importantes, sem música"'
-            className="campo resize-none text-[15px] leading-relaxed !bg-card-2"
-          />
-          <div className="flex flex-wrap gap-2 mt-3">
-            {EXEMPLOS.map((ex) => (
-              <Chip key={ex} onClick={() => adicionarExemplo(ex)}>
-                + {ex}
-              </Chip>
-            ))}
-          </div>
-        </div>
       </div>
 
-      {/* Templates */}
+      {/* 2. O que fazer */}
       <div className="cartao p-5 mt-4">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <div className="rotulo inline-flex items-center gap-1.5"><LayoutTemplate className="size-3.5" /> Template visual</div>
-          <button onClick={salvarComoTemplate} className="text-xs text-suave hover:text-texto inline-flex items-center gap-1 cursor-pointer">
-            <Save className="size-3.5" /> Salvar opções atuais como template
-          </button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
-            onClick={() => setTemplate(null)}
-            className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors cursor-pointer ${template === null ? "border-roxo bg-roxo/10" : "border-borda hover:border-borda-forte"}`}
-          >
-            <div className="w-[90px] h-[160px] rounded-xl border border-dashed border-borda flex items-center justify-center shrink-0">
-              <SlidersHorizontal className="size-6 text-apagado" />
-            </div>
-            <div className="min-w-0">
-              <div className="font-semibold text-sm">Personalizado</div>
-              <div className="text-xs text-suave mt-1">Escolha cada opção abaixo, uma por uma.</div>
-            </div>
-          </button>
-          {Object.entries(templates).map(([id, t]) => (
-            <div
+        <div className="rotulo mb-3">2 · O que fazer</div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {[
+            { id: "curto", icone: Smartphone, titulo: "Clipes curtos", texto: "Os melhores momentos viram clipes verticais para TikTok, Reels e Shorts, com legenda, título e texto do post." },
+            { id: "longo", icone: Film, titulo: "Vídeo longo", texto: "Para o YouTube: o vídeo inteiro enxuto ou uma compilação dos melhores momentos, com capítulos e thumbnails." },
+          ].map(({ id, icone: Icone, titulo: t, texto }) => (
+            <button
               key={id}
-              role="button"
-              tabIndex={0}
-              onClick={() => aplicarTemplate(id)}
-              onKeyDown={(e) => e.key === "Enter" && aplicarTemplate(id)}
-              className={`group relative flex items-center gap-3 rounded-xl border p-3 text-left transition-colors cursor-pointer ${template === id ? "border-roxo bg-roxo/10" : "border-borda hover:border-borda-forte"}`}
+              onClick={() => setTipo(id)}
+              className={`text-left rounded-2xl border p-4 transition-colors cursor-pointer ${tipo === id ? "border-black bg-black/[0.03]" : "border-black/10 hover:border-black/25"}`}
             >
-              {estilos[t.preset] ? (
-                <PreviewLegenda
-                  estilo={{ ...estilos[t.preset], cor_destaque: t.cor || estilos[t.preset].cor_destaque, barra_progresso: { ...estilos[t.preset].barra_progresso, ativa: t.barra ?? estilos[t.preset].barra_progresso?.ativa } }}
-                  titulo={t.titulo ? t.nome : null}
-                  largura={90}
-                  fundo={recentes[0]?.thumb_url}
-                />
-              ) : (
-                <div className="w-[90px] h-[160px] rounded-xl bg-card-2 shrink-0" />
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold text-sm flex items-center gap-1.5">
-                  {template === id && <Check className="size-3.5 text-roxo shrink-0" />}
-                  <span className="truncate">{t.nome}</span>
+              <div className="flex items-center gap-3">
+                <div className={`size-10 rounded-xl flex items-center justify-center ${tipo === id ? "gradiente" : "bg-card-2 text-texto"}`}>
+                  <Icone className="size-5" />
                 </div>
-                <div className="text-xs text-suave mt-1 line-clamp-2">{t.descricao}</div>
-                <div className="flex flex-wrap gap-1 mt-2 text-[10px] text-apagado">
-                  <span className="rounded-md bg-card-2 px-1.5 py-0.5">{t.formato}</span>
-                  <span className="rounded-md bg-card-2 px-1.5 py-0.5">{t.duracao[0]}-{t.duracao[1]}s</span>
-                  {t.modo && <span className="rounded-md bg-card-2 px-1.5 py-0.5">{t.modo === "gameplay" ? "Gameplay" : "Falado"}</span>}
-                  {t.zoom && <span className="rounded-md bg-card-2 px-1.5 py-0.5 inline-flex items-center gap-0.5"><ZoomIn className="size-2.5" />zoom</span>}
-                  {t.musica && <span className="rounded-md bg-card-2 px-1.5 py-0.5 inline-flex items-center gap-0.5"><Music className="size-2.5" />{CLIMAS[t.musica] || "auto"}</span>}
-                  {t.efeitos && <span className="rounded-md bg-card-2 px-1.5 py-0.5 inline-flex items-center gap-0.5"><AudioLines className="size-2.5" />efeitos</span>}
-                </div>
+                <div className="font-medium text-[17px]">{t}</div>
               </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); excluirTemplate(id); }}
-                className="absolute top-2 right-2 p-1 rounded-md text-apagado opacity-0 group-hover:opacity-100 hover:text-texto hover:bg-white/5 cursor-pointer"
-                aria-label="Excluir template"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
-            </div>
+              <p className="text-sm text-suave mt-3">{texto}</p>
+            </button>
           ))}
         </div>
-      </div>
 
-      {/* Opções rápidas */}
-      <div className="cartao p-5 mt-4 space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-4">
           <div>
-            <div className="rotulo mb-2">Tipo de vídeo</div>
+            <div className="rotulo mb-2">Conteúdo</div>
             <Segmentado
               valor={modo}
               aoMudar={setModo}
@@ -395,156 +236,180 @@ export default function Home() {
               ]}
             />
           </div>
-          <div>
-            <div className="rotulo mb-2">Nº de clipes</div>
-            <div className="inline-flex items-center rounded-xl border border-borda bg-fundo">
-              <button className="px-3 py-2 text-suave hover:text-texto cursor-pointer" onClick={() => mudarNumClips(numClips > 10 ? numClips - 5 : numClips - 1)}>−</button>
-              <span className="w-9 text-center font-semibold tabular-nums">{numClips}</span>
-              <button className="px-3 py-2 text-suave hover:text-texto cursor-pointer" onClick={() => mudarNumClips(numClips >= 10 ? numClips + 5 : numClips + 1)}>+</button>
+
+          {tipo === "curto" ? (
+            <>
+              <div>
+                <div className="rotulo mb-2">Clipes</div>
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center rounded-full border border-black/10 bg-white">
+                    <button className="px-3 py-1.5 text-suave hover:text-texto cursor-pointer" onClick={() => mudarNumClips(numClips > 10 ? numClips - 5 : numClips - 1)}>−</button>
+                    <span className="w-8 text-center font-medium tabular-nums">{numClips}</span>
+                    <button className="px-3 py-1.5 text-suave hover:text-texto cursor-pointer" onClick={() => mudarNumClips(numClips >= 10 ? numClips + 5 : numClips + 1)}>+</button>
+                  </div>
+                  {[10, 30, 70].map((n) => (
+                    <Chip key={n} ativo={numClips === n} onClick={() => mudarNumClips(n)}>{n}</Chip>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="rotulo mb-2">Duração</div>
+                <div className="flex gap-2">
+                  {Object.keys(DURACOES).map((d) => (
+                    <Chip key={d} ativo={duracao === d} onClick={() => setDuracao(d)}>{d}</Chip>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div>
+              <div className="rotulo mb-2">Edição</div>
+              <div className="flex flex-wrap gap-2">
+                <Chip ativo={modoLongo === "enxugar"} onClick={() => setModoLongo("enxugar")}><Scissors className="inline size-3 mr-1" />Enxugar o vídeo inteiro</Chip>
+                <Chip ativo={modoLongo === "melhores"} onClick={() => setModoLongo("melhores")}><Trophy className="inline size-3 mr-1" />Melhores momentos</Chip>
+              </div>
             </div>
-            <div className="flex gap-1.5 mt-2">
-              {[10, 30, 50, 70, 100].map((n) => (
-                <button key={n} onClick={() => mudarNumClips(n)} className={`text-xs px-2 py-0.5 rounded-md border cursor-pointer ${numClips === n ? "border-roxo text-texto" : "border-borda text-suave hover:text-texto"}`}>
-                  {n}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-x-8 gap-y-5">
-          <div>
-            <div className="rotulo mb-2">Duração</div>
-            <div className="flex gap-2">
-              {Object.keys(DURACOES).map((d) => (
-                <Chip key={d} ativo={duracao === d} onClick={() => setDuracao(d)}>{d}</Chip>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div className="rotulo mb-2">Formato</div>
-            <Segmentado valor={formato} aoMudar={setFormato} opcoes={FORMATOS} tamanho="sm" />
-          </div>
-          <div>
-            <div className="rotulo mb-2">Legenda</div>
-            <div className="flex items-center gap-2">
-              <select value={preset} onChange={(e) => setPreset(e.target.value)} className="campo !w-auto !py-1.5 cursor-pointer">
-                {Object.entries(estilos).map(([id, e]) => (
-                  <option key={id} value={id}>{e.nome || id}</option>
-                ))}
-              </select>
-              <Chip ativo={animada} onClick={() => setAnimada(!animada)}>
-                <Wand2 className="inline size-3 mr-1" />Animada
-              </Chip>
-            </div>
-          </div>
+          )}
         </div>
 
-        <button onClick={() => setAvancado(!avancado)} className="text-xs text-suave hover:text-texto inline-flex items-center gap-1 cursor-pointer">
-          <ChevronDown className={`size-3.5 transition-transform ${avancado ? "rotate-180" : ""}`} /> Opções avançadas
+        {tipo === "longo" && modoLongo === "melhores" && (
+          <div className="mt-4">
+            <div className="rotulo mb-2">Duração da compilação</div>
+            <div className="flex flex-wrap gap-2">
+              {ALVOS.map((m) => <Chip key={m} ativo={alvo === m} onClick={() => setAlvo(m)}>{m} min</Chip>)}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-5">
+          <label className="rotulo">Instrução (opcional)</label>
+          <textarea
+            value={instrucao}
+            onChange={(e) => setInstrucao(e.target.value)}
+            rows={2}
+            placeholder={tipo === "curto" ? "Ex.: só as kills de faca, legenda amarela, sem música" : "Ex.: tira a parte do patrocínio e a conversa do final"}
+            className="campo mt-2 resize-none"
+          />
+        </div>
+
+        {/* Mais opções */}
+        <button onClick={() => setMaisOpcoes(!maisOpcoes)} className="mt-4 text-xs text-suave hover:text-texto inline-flex items-center gap-1 cursor-pointer">
+          <ChevronDown className={`size-3.5 transition-transform ${maisOpcoes ? "rotate-180" : ""}`} /> Mais opções
         </button>
-        {avancado && (
-          <div className="grid sm:grid-cols-2 gap-4 animate-surgir">
-            <div>
-              <label className="rotulo">Enquadramento</label>
-              <select value={layout} onChange={(e) => setLayout(e.target.value)} className="campo mt-2 cursor-pointer">
-                <option value="auto">Automático</option>
-                <option value="rosto">Seguir quem fala</option>
-                <option value="dupla">Duas pessoas (tela dividida)</option>
-                <option value="centro">Recorte central fixo</option>
-                <option value="inteiro">Vídeo inteiro + fundo desfocado</option>
-                <option value="jogo">Gameplay em destaque (recorte 4:5)</option>
-                <option value="split">Gameplay em cima + facecam/apoio embaixo</option>
-              </select>
-            </div>
-            <div>
-              <label className="rotulo">Idioma da legenda</label>
-              <select value={idiomaLegenda} onChange={(e) => setIdiomaLegenda(e.target.value)} className="campo mt-2 cursor-pointer">
-                <option value="">Mesmo idioma do vídeo</option>
-                <option value="en">Inglês</option>
-                <option value="es">Espanhol</option>
-                <option value="pt">Português</option>
-                <option value="fr">Francês</option>
-                <option value="it">Italiano</option>
-                <option value="de">Alemão</option>
-              </select>
-              {idiomaLegenda && <p className="text-xs text-apagado mt-1">Legenda e título traduzidos pelo Claude (~US$ 0,002 por clipe); a fala continua no original.</p>}
-            </div>
+        {maisOpcoes && (
+          <div className="mt-4 grid sm:grid-cols-2 gap-x-6 gap-y-4 animate-surgir">
+            {tipo === "curto" && (
+              <>
+                <div>
+                  <label className="rotulo">Legenda</label>
+                  <div className="flex items-center gap-2 mt-2">
+                    <select value={preset} onChange={(e) => setPreset(e.target.value)} className="campo cursor-pointer">
+                      {Object.entries(estilos).map(([id, e]) => <option key={id} value={id}>{e.nome || id}</option>)}
+                    </select>
+                    <Chip ativo={animada} onClick={() => setAnimada(!animada)}>Animada</Chip>
+                  </div>
+                </div>
+                <div>
+                  <label className="rotulo">Idioma da legenda</label>
+                  <select value={idiomaLegenda} onChange={(e) => setIdiomaLegenda(e.target.value)} className="campo mt-2 cursor-pointer">
+                    {Object.entries(IDIOMAS).map(([k, r]) => <option key={k} value={k}>{r}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="rotulo">Formato</label>
+                  <select value={formato} onChange={(e) => setFormato(e.target.value)} className="campo mt-2 cursor-pointer">
+                    <option value="9:16">Vertical 9:16 (TikTok, Reels, Shorts)</option>
+                    <option value="1:1">Quadrado 1:1</option>
+                    <option value="16:9">Horizontal 16:9</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="rotulo">Enquadramento</label>
+                  <select value={layout} onChange={(e) => setLayout(e.target.value)} className="campo mt-2 cursor-pointer">
+                    <option value="auto">Automático</option>
+                    <option value="rosto">Seguir quem fala</option>
+                    <option value="dupla">Duas pessoas (tela dividida)</option>
+                    <option value="centro">Recorte central fixo</option>
+                    <option value="inteiro">Vídeo inteiro + fundo desfocado</option>
+                    <option value="jogo">Gameplay em destaque</option>
+                    <option value="split">Gameplay em cima + facecam embaixo</option>
+                  </select>
+                </div>
+              </>
+            )}
+            {tipo === "longo" && modo === "falado" && (
+              <div>
+                <label className="rotulo">Ritmo</label>
+                <div className="mt-2">
+                  <Segmentado tamanho="sm" valor={ritmo} aoMudar={setRitmo} opcoes={[{ valor: "natural", rotulo: "Natural" }, { valor: "dinamico", rotulo: "Dinâmico" }, { valor: "rapido", rotulo: "Rápido" }]} />
+                </div>
+              </div>
+            )}
             <div>
               <label className="rotulo">Música de fundo</label>
               <select value={musica} onChange={(e) => setMusica(e.target.value)} className="campo mt-2 cursor-pointer">
                 <option value="">Sem música</option>
-                <option value="auto">Automática (o Claude escolhe o clima)</option>
-                {Object.entries(CLIMAS).map(([k, r]) => (
-                  <option key={k} value={k}>{r} ({audio?.musicas?.[k]?.length ?? 0})</option>
-                ))}
-                <option value="arquivo">Arquivo específico…</option>
+                <option value="auto">Automática (pelo clima)</option>
+                {Object.entries(CLIMAS).map(([k, r]) => <option key={k} value={k}>{r}</option>)}
               </select>
-              {musica === "arquivo" && (
-                <input value={musicaArquivo} onChange={(e) => setMusicaArquivo(e.target.value)} placeholder="C:\musicas\lofi.mp3" className="campo mt-2 font-mono text-[13px]" />
+              {semMusicas && musica && (
+                <Link to="/configuracoes#audio" className="text-xs underline mt-1 inline-block">Biblioteca vazia: baixar o pacote grátis</Link>
               )}
             </div>
-            <div className="flex flex-col justify-end gap-1">
-              <Alternador ativo={efeitos} aoMudar={setEfeitos} rotulo="Efeitos sonoros" descricao="Whoosh no título, impacto nas kills, pop nos zooms" />
-              {audio && Object.values(audio.musicas).every((l) => !l.length) && (
-                <Link to="/configuracoes#audio" className="text-xs text-roxo hover:underline text-left">
-                  Sem músicas na biblioteca: baixar o pacote grátis
-                </Link>
-              )}
-            </div>
-            <Alternador ativo={zoom} aoMudar={setZoom} rotulo="Zoom automático" descricao="Nas palavras de ênfase e nos picos do gameplay" />
-            <Alternador ativo={silencios} aoMudar={setSilencios} rotulo="Remover silêncios e vícios" descricao="Corta pausas longas e “hum”, “é”, “tipo” isolados" />
-            <Alternador ativo={titulo} aoMudar={setTitulo} rotulo="Título gancho" descricao="Aparece nos primeiros segundos" />
-            <Alternador ativo={limparVoz ?? modo === "falado"} aoMudar={setLimparVoz} rotulo="Melhorar a voz" descricao="Tira ruído de fundo e zumbido (automático na fala)" />
+
+            <Alternador ativo={diretor} aoMudar={setDiretor} rotulo="Diretor de arte (IA)" descricao="Cor, transições, zoom e efeitos escolhidos pelo clima de cada trecho" />
+            <Alternador ativo={efeitos} aoMudar={setEfeitos} rotulo="Efeitos sonoros" descricao="Whoosh, impacto e pop nos momentos certos" />
+            <Alternador ativo={zoom} aoMudar={setZoom} rotulo="Zoom" descricao="Nas ênfases e para esconder os cortes secos" />
+            <Alternador ativo={abertura} aoMudar={setAbertura} rotulo="Abrir com o melhor momento" descricao="Teaser no começo, para segurar quem chegou" />
+            <Alternador ativo={limparVoz ?? modo === "falado"} aoMudar={setLimparVoz} rotulo="Melhorar a voz" descricao="Tira ruído de fundo e zumbido" />
             {modo === "falado" && (
-              <Alternador ativo={broll} aoMudar={setBroll} rotulo="B-roll (vídeos de apoio)" descricao="Quando a fala cita algo concreto (“comprei um carro”), cobre a tela por 2-3 s com um vídeo do Pixabay. Precisa da chave grátis em Configurações" />
+              <Alternador ativo={broll} aoMudar={setBroll} rotulo="B-roll" descricao="Vídeos de apoio quando a fala cita algo concreto (chave do Pixabay)" />
             )}
-            <Alternador ativo={reacoes} aoMudar={setReacoes} rotulo="Textos de reação" descricao="“ESPERA...”, “KKKKK”, “QUE ISSO?!” pulando na tela no susto, na virada ou na risada" />
-            <Alternador ativo={diretor} aoMudar={setDiretor} rotulo="Diretor de arte (IA)" descricao="O Claude escolhe legenda, cor, transições, zoom e efeitos de cada clipe pelo clima do trecho. Desligado: todos iguais ao estilo escolhido" />
-            <Alternador ativo={abertura} aoMudar={setAbertura} rotulo="Abrir com o clímax" descricao="1-2 s do melhor momento antes do contexto (segura nos 3 primeiros segundos)" />
-            <Alternador ativo={barra ?? !!estilos[preset]?.barra_progresso?.ativa} aoMudar={setBarra} rotulo="Barra de progresso" descricao="Enche no topo durante o clipe" />
+            {tipo === "curto" && (
+              <>
+                <Alternador ativo={titulo} aoMudar={setTitulo} rotulo="Título gancho" descricao="Nos primeiros segundos do clipe" />
+                <Alternador ativo={reacoes} aoMudar={setReacoes} rotulo="Textos de reação" descricao="“ESPERA...”, “KKKK” no susto e na virada" />
+                <Alternador ativo={silencios} aoMudar={setSilencios} rotulo="Cortar silêncios" descricao="Pausas longas e “hum”, “é”, “tipo”" />
+              </>
+            )}
+            {tipo === "longo" && modo === "falado" && (
+              <Alternador ativo={removerErros} aoMudar={setRemoverErros} rotulo="Tirar erros de gravação" descricao="Frases repetidas, começos em falso e desvios" />
+            )}
+            {tipo === "longo" && (
+              <Alternador ativo={legendaLonga} aoMudar={setLegendaLonga} rotulo="Legenda na tela" descricao="O .srt para o YouTube sai sempre" />
+            )}
             {modo === "gameplay" && (
               <>
-                <div>
-                  <label className="rotulo">Vídeo de apoio (se não houver facecam)</label>
-                  <input value={apoio} onChange={(e) => setApoio(e.target.value)} placeholder="C:\videos\satisfatorio.mp4" className="campo mt-2 font-mono text-[13px]" />
-                </div>
-                <div className="flex items-end">
-                  <Alternador ativo={verImagens} aoMudar={setVerImagens} rotulo="Claude vê as imagens do jogo" descricao="8 quadros por momento: descarta menus e tempo morto, apara início e fim (~US$ 0,01 por vídeo)" />
-                </div>
+                <Alternador ativo={verImagens} aoMudar={setVerImagens} rotulo="Claude vê a tela do jogo" descricao="Descarta menus, loading e tempo parado" />
+                {tipo === "longo" && (
+                  <Alternador ativo={cortarParado} aoMudar={setCortarParado} rotulo="Cortar tempo parado" descricao="Andanças longas sem nada acontecendo" />
+                )}
+                {tipo === "curto" && (
+                  <div>
+                    <label className="rotulo">Vídeo de apoio (sem facecam)</label>
+                    <input value={apoio} onChange={(e) => setApoio(e.target.value)} placeholder="C:\videos\satisfatorio.mp4" className="campo mt-2 font-mono text-[13px]" />
+                  </div>
+                )}
               </>
             )}
           </div>
         )}
       </div>
 
-      <div className="mt-6 flex flex-col items-center gap-3">
-        <Botao variante="primario" tamanho="lg" icone={Sparkles} onClick={gerar} disabled={!pronto} carregando={enviando !== null} className="w-full sm:w-auto sm:min-w-72">
-          {enviando !== null ? (enviando < 1 ? `Enviando ${Math.round(enviando * 100)}%` : "Criando projeto…") : "Gerar clipes"}
-        </Botao>
-        <span className="text-xs text-apagado">
-          <kbd className="px-1.5 py-0.5 rounded bg-card border border-borda">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 rounded bg-card border border-borda">Enter</kbd>
-        </span>
-      </div>
-
-      {recentes.length > 0 && (
-        <div className="mt-14">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-suave">Recentes</h2>
-            <Link to="/projetos" className="text-xs text-suave hover:text-texto">Ver todos</Link>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {recentes.map((p) => (
-              <Link key={p.id} to={`/projetos/${p.id}`} className="cartao overflow-hidden hover:border-borda-forte transition-colors">
-                <img src={p.thumb_url} alt="" className="aspect-video w-full object-cover bg-card-2" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
-                <div className="p-2.5">
-                  <div className="text-xs font-semibold truncate">{p.nome}</div>
-                  <div className="text-[11px] text-apagado">{formatarData(p.criado_em)}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
+      {modo === "gameplay" && !verImagens && tipo === "longo" && modoLongo === "enxugar" && (
+        <div className="mt-4">
+          <Aviso tipo="alerta">Sem a tela, o tempo morto é cortado só pelo áudio, o que quase não tira nada em jogo com som constante.</Aviso>
         </div>
       )}
+
+      <div className="mt-6 flex flex-col items-center gap-3">
+        <Botao variante="primario" tamanho="lg" icone={Sparkles} onClick={enviar} disabled={!pronto} carregando={enviando !== null} className="w-full sm:w-auto sm:min-w-72">
+          {enviando !== null
+            ? enviando < 1 ? `Enviando ${Math.round(enviando * 100)}%` : "Criando projeto…"
+            : tipo === "curto" ? `Gerar ${numClips} clipe${numClips > 1 ? "s" : ""}` : "Editar o vídeo"}
+        </Botao>
+        <span className="rotulo-mono text-black/35">Ctrl + Enter</span>
+      </div>
     </div>
   );
 }

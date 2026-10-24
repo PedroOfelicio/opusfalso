@@ -58,7 +58,7 @@ export default function PrimeiroUso() {
           <div className="flex items-center gap-3">
             <div className="size-11 rounded-xl gradiente flex items-center justify-center"><Sparkles className="size-5 text-white" /></div>
             <div>
-              <h2 className="text-xl font-extrabold">Bem-vindo ao Clipador</h2>
+              <h2 className="text-xl font-semibold">Bem-vindo ao Gadosso Edit</h2>
               <p className="text-sm text-suave">Falta só uma coisa para começar: a sua chave do Claude.</p>
             </div>
           </div>
