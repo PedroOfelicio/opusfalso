@@ -125,3 +125,31 @@ export const formatarData = (ts) =>
 
 export const formatarBytes = (b) =>
   b > 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b > 1e6 ? `${(b / 1e6).toFixed(0)} MB` : `${(b / 1e3).toFixed(0)} KB`;
+
+// Custo na API do Claude: "grátis" quando não gastou nada; centavos de dólar com 3 casas (é o que costuma custar)
+export const formatarCusto = (v) => {
+  if (!v || v < 0.0005) return "grátis";
+  return `US$ ${v.toFixed(v < 1 ? 3 : 2).replace(".", ",")}`;
+};
+
+// Nome amigável de cada etapa que chama o Claude (o "motivo" registrado em custos.py)
+export const ETAPAS_CUSTO = {
+  "plano de edição": "Entender a instrução",
+  "escolha de cortes": "Escolher os momentos",
+  "escolha gameplay": "Escolher os momentos",
+  "revisão do clipe": "Olhar a tela do jogo",
+  "tradução da legenda": "Traduzir a legenda",
+  ajuste: "Ajustes pedidos",
+  "edição de vídeo longo": "Decidir a edição",
+  "títulos do vídeo longo": "Títulos e capítulos",
+  "correções da transcrição": "Corrigir a transcrição",
+};
+
+export const detalheCusto = (etapas) => {
+  const somas = {};
+  for (const [k, v] of Object.entries(etapas || {})) {
+    const nome = ETAPAS_CUSTO[k] || k;
+    somas[nome] = (somas[nome] || 0) + v;
+  }
+  return Object.entries(somas).sort((a, b) => b[1] - a[1]);
+};

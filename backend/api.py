@@ -53,9 +53,17 @@ EXTENSOES = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"}
 
 @app.on_event("startup")
 def _inicio():
+    historico = custos.resumo()["historico"]
     # Jobs que estavam rodando quando o servidor caiu não voltam sozinhos
     for meta in projetos.listar():
         mudou = False
+        if "custo_etapas" not in meta:  # projeto de antes da conta por etapa: monta pelo histórico de chamadas
+            etapas: dict[str, float] = {}
+            for h in historico:
+                if h.get("projeto") == meta["id"]:
+                    etapas[h.get("motivo") or "outros"] = round(etapas.get(h.get("motivo") or "outros", 0) + h["custo"], 6)
+            meta["custo_etapas"] = etapas
+            mudou = True
         if meta["status"] in ("fila", "processando"):
             meta.update(status="erro", erro="Processamento interrompido (o servidor foi reiniciado). Use 'Tentar de novo'.")
             mudou = True
@@ -102,7 +110,9 @@ def _publico(meta: dict) -> dict:
         decorrido = agora - m["iniciado_em"]
         m["restante_s"] = round(decorrido * (1 - m["progresso"]) / m["progresso"])
     sumidos = 0
+    por_clip = pipeline.custo_dos_clipes(meta)
     for c in m.get("clips", []):
+        c["custo_estimado"] = por_clip.get(c["id"], 0)
         v = c.get("versao", 0)
         c["sem_arquivo"] = bool(c.get("arquivo")) and not Path(c["arquivo"]).exists()
         sumidos += c["sem_arquivo"]
@@ -137,7 +147,7 @@ def _resumo(meta: dict) -> dict:
         "num_clips": len([c for c in meta.get("clips", []) if c.get("arquivo")]),
         "melhor_nota": max([c.get("nota", 0) for c in meta.get("clips", [])] or [0]),
         "duracao_video": meta.get("duracao_video"), "thumb_url": f"/api/projetos/{meta['id']}/thumb",
-        "erro": meta.get("erro"),
+        "erro": meta.get("erro"), "custo": meta.get("custo") or 0, "sem_ia": bool((meta.get("opcoes") or {}).get("sem_ia")),
     }
 
 

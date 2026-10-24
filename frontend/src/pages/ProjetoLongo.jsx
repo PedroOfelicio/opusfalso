@@ -8,6 +8,7 @@ import {
 import { api, formatarDuracao } from "../api";
 import { Alternador, Aviso, Botao, Chip, Confirmar, EstadoErro, Esqueleto, Segmentado, usePolling, useAvisar } from "../components/ui";
 import Processando from "./Processando";
+import CustoProjeto from "../components/Custo";
 
 // Mesmas etapas do backend (longo.ETAPAS)
 const ETAPAS_LONGO = [
@@ -111,9 +112,9 @@ function Resultado({ projeto, recarregar }) {
           <div className="flex items-center gap-2 text-xs text-suave">
             {projeto.modo === "gameplay" ? <Gamepad2 className="size-3.5" /> : <Mic className="size-3.5" />}
             {lg.modo_longo === "melhores" ? "Melhores momentos" : "Vídeo inteiro enxugado"}
-            {projeto.custo > 0 && <> · US$ {projeto.custo.toFixed(3)} na API</>}
           </div>
           <h1 className="text-2xl font-semibold tracking-tight truncate mt-1">{projeto.nome}</h1>
+          <div className="mt-2"><CustoProjeto projeto={projeto} /></div>
         </div>
         <div className="flex flex-wrap gap-2">
           {projeto.edicao && (

@@ -483,8 +483,39 @@ def _preparar_corte(meta: dict, clip: dict, cfg: dict, palavras: list[dict], pid
             "impactos": picos if meta["modo"] == "gameplay" else [], "replay": replay, "inicio_replay": inicio_replay}
 
 
+def somar_custo_clipes(pid: str, cids: list[str], valor: float) -> dict | None:
+    """Custo próprio de clipes (tradução, trocar o momento, ajuste): dividido igual entre os clipes."""
+    if not valor or not cids:
+        return None
+    parte = valor / len(cids)
+
+    def f(m):
+        for c in m["clips"]:
+            if c["id"] in cids:
+                c["custo"] = round((c.get("custo") or 0) + parte, 6)
+    meta = projetos.atualizar(pid, f)
+    return projetos.clip(meta, cids[-1])
+
+
+def custo_dos_clipes(meta: dict) -> dict[str, float]:
+    """Quanto cada clipe custou: o custo próprio dele + a parte igual do que é do projeto todo (plano,
+    escolha e revisão dos momentos). Projeto antigo, sem custo próprio gravado: tudo vira parte igual."""
+    clips = meta.get("clips") or []
+    if not clips:
+        return {}
+    proprios = {c["id"]: c.get("custo") or 0 for c in clips}
+    comum = max(0.0, (meta.get("custo") or 0) - sum(proprios.values())) / len(clips)
+    return {cid: round(v + comum, 6) for cid, v in proprios.items()}
+
+
 def renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progresso=None, cancelado=None) -> dict:
     """Corta + reenquadra + legenda um clipe. Pode ser chamado de novo após edições."""
+    with custos.medir() as gasto:  # ex.: tradução da legenda
+        clip = _renderizar_clip(pid, cid, transcricao, progresso, cancelado)
+    return somar_custo_clipes(pid, [cid], gasto["custo"]) or clip
+
+
+def _renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progresso=None, cancelado=None) -> dict:
     meta = projetos.ler(pid)
     clip = projetos.clip(meta, cid)
     cfg = config_clip(meta, clip)
@@ -1155,8 +1186,7 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
                 renderizar_clip(pid, c["id"], transcricao, lambda p, k=k: prog((k + p) / n, f"Clipe {k + 1} de {n}"), cancelado)
 
     prog.finalizar()
-    custo = sum(h["custo"] for h in custos.resumo()["historico"] if h.get("projeto") == pid)
-    return projetos.atualizar(pid, lambda m: m.update(status="pronto", custo=round(custo, 5), terminado_em=time.time()))
+    return projetos.atualizar(pid, lambda m: m.update(status="pronto", terminado_em=time.time()))
 
 
 # Campos que definem o resultado de um clipe (decididos pelo Claude ou pelo plano local)
@@ -1211,13 +1241,15 @@ def regenerar_clip(pid: str, cid: str, progresso=None, cancelado=None) -> dict:
     plano = PlanoEdicao.model_validate(meta["plano"])
     transcricao = tr.transcrever(meta["video"])
     ocupados = [(c["inicio"], c["fim"]) for c in meta["clips"]] + meta.get("descartados", [])
-    if meta["modo"] == "gameplay":
-        analise = analise_audio.analisar(meta["video"])
-        novos = _cortes_gameplay(meta["video"], transcricao, analise, plano, pid, excluir=ocupados, quantidade=1,
-                                 ver_imagens=_ver_imagens(meta["opcoes"]), cancelado=cancelado)
-    else:
-        novos = _cortes_falado(transcricao, plano, pid, excluir=ocupados, quantidade=1)
+    with custos.medir() as gasto:
+        if meta["modo"] == "gameplay":
+            analise = analise_audio.analisar(meta["video"])
+            novos = _cortes_gameplay(meta["video"], transcricao, analise, plano, pid, excluir=ocupados, quantidade=1,
+                                     ver_imagens=_ver_imagens(meta["opcoes"]), cancelado=cancelado)
+        else:
+            novos = _cortes_falado(transcricao, plano, pid, excluir=ocupados, quantidade=1)
     if not novos:
+        somar_custo_clipes(pid, [cid], gasto["custo"])  # a busca custou, mesmo sem achar nada
         raise ValueError("Não encontrei outro trecho bom que ainda não tenha virado clipe.")
     novo = _novo_clip(cid, novos[0])
 
@@ -1225,6 +1257,7 @@ def regenerar_clip(pid: str, cid: str, progresso=None, cancelado=None) -> dict:
         antigo = projetos.clip(m, cid)
         m.setdefault("descartados", []).append((antigo["inicio"], antigo["fim"]))
         novo["config"] = antigo.get("config", {})  # mantém as preferências visuais
+        novo["custo"] = round((antigo.get("custo") or 0) + gasto["custo"], 6)  # o que já se gastou nesta vaga
         m["clips"] = [novo if c["id"] == cid else c for c in m["clips"]]
     projetos.atualizar(pid, f)
     return renderizar_clip(pid, cid, transcricao, progresso, cancelado)
@@ -1234,11 +1267,13 @@ def aplicar_ajuste(pid: str, pedido: str, cids: list[str], progresso=None, cance
     """Pedido em linguagem natural aplicado aos clipes selecionados."""
     meta = projetos.ler(pid)
     selecionados = [c for c in meta["clips"] if c["id"] in cids]
-    try:
-        ajuste = llm.interpretar_ajuste(pedido, selecionados, pid)
-    except llm.ErroClaude as e:
-        _claude_falhou(pid, e)
-        ajuste = local.interpretar_ajuste(pedido, selecionados)
+    with custos.medir() as gasto:
+        try:
+            ajuste = llm.interpretar_ajuste(pedido, selecionados, pid)
+        except llm.ErroClaude as e:
+            _claude_falhou(pid, e)
+            ajuste = local.interpretar_ajuste(pedido, selecionados)
+    somar_custo_clipes(pid, [c["id"] for c in selecionados], gasto["custo"])
     transcricao = tr.transcrever(meta["video"])
 
     def f(m):

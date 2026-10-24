@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Clapperboard, Film, Gamepad2, Mic, Plus, Search, Trash2 } from "lucide-react";
-import { api, formatarData, formatarDuracao } from "../api";
+import { api, formatarCusto, formatarData, formatarDuracao } from "../api";
 import { corDaNota } from "../components/ScoreBadge";
 import { Alternador, Botao, Chip, Confirmar, EstadoErro, EstadoVazio, Esqueleto, usePolling, useAvisar } from "../components/ui";
 
@@ -139,17 +139,18 @@ export default function Projetos() {
                 <div className="p-4">
                   <div className="font-semibold truncate">{p.nome}</div>
                   <div className="flex items-center gap-3 mt-1.5 text-xs text-suave">
-                    <span className="inline-flex items-center gap-1">
-                      {p.modo === "gameplay" ? <Gamepad2 className="size-3.5" /> : <Mic className="size-3.5" />}
+                    <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
+                      {p.modo === "gameplay" ? <Gamepad2 className="size-3.5 shrink-0" /> : <Mic className="size-3.5 shrink-0" />}
                       {formatarData(p.criado_em)}
                     </span>
-                    <span className="ml-auto inline-flex items-center gap-1.5">
+                    <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap">
                       {p.tipo === "longo" && <Film className="size-3.5 text-roxo" />}
                       {rodando
                         ? `${Math.round((p.progresso || 0) * 100)}%`
                         : p.tipo === "longo"
                           ? p.duracao_final ? `Vídeo longo · ${formatarDuracao(p.duracao_final)}` : "Vídeo longo"
                           : `${p.num_clips} clipe(s)`}
+                      {!rodando && <span className="text-black/45 tabular-nums" title="Custo na API do Claude">· {formatarCusto(p.custo)}</span>}
                       {p.num_clips > 0 && <span className="size-2 rounded-full" style={{ background: corDaNota(p.melhor_nota) }} title={`Melhor nota: ${p.melhor_nota}`} />}
                     </span>
                   </div>

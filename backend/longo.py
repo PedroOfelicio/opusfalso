@@ -30,7 +30,6 @@ import biblioteca_audio as biblioteca
 import broll
 import config
 import direcao
-import custos
 import editor_ffmpeg as ef
 import legendas
 import pipeline
@@ -155,8 +154,7 @@ def _montar_e_finalizar(pid, opc, edl, transcricao, info, prog, cancelado) -> di
     prog.etapa("finalizando")
     longo = _finalizar(pid, meta, edl, res, prog)
     prog.finalizar()
-    custo = sum(h["custo"] for h in custos.resumo()["historico"] if h.get("projeto") == pid)
-    return projetos.atualizar(pid, lambda m: m.update(status="pronto", longo=longo, custo=round(custo, 5),
+    return projetos.atualizar(pid, lambda m: m.update(status="pronto", longo=longo,
                                                      terminado_em=time.time()))
 
 

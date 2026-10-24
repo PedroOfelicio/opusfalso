@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, Download, ImageDown, Loader2, Pencil, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
-import { formatarDuracao } from "../api";
+import { formatarCusto, formatarDuracao } from "../api";
 import ScoreBadge from "./ScoreBadge";
 import { Dica } from "./ui";
 
@@ -156,6 +156,11 @@ export default function VideoCard({ clip, projetoId, selecionado, aoSelecionar, 
             </button>
           </Dica>
           <div className="flex-1" />
+          {clip.custo_estimado != null && (
+            <Dica texto="Quanto este clipe custou na API (o dele + a parte da escolha dos momentos)" lado="cima">
+              <span className="px-1.5 text-xs whitespace-nowrap text-black/45 tabular-nums">{formatarCusto(clip.custo_estimado)}</span>
+            </Dica>
+          )}
           <Dica texto="Excluir" lado="cima">
             <button onClick={aoExcluir} disabled={ocupado} className="p-2 rounded-lg text-suave hover:text-vermelho hover:bg-vermelho/10 disabled:opacity-40 cursor-pointer">
               <Trash2 className="size-4" />

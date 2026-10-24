@@ -17,6 +17,7 @@ from unittest import mock
 
 import biblioteca_audio as bib
 import config
+import custos
 import editor_ffmpeg as ef
 import longo
 import pipeline
@@ -541,3 +542,32 @@ class SemIA(Temporario):
         self.assertFalse(pipeline._ver_imagens({"sem_ia": True, "ver_imagens": True}))
         self.assertTrue(pipeline._ver_imagens({}))
         self.assertFalse(longo._opcoes({"modo": "gameplay", "opcoes": {"sem_ia": True}})["ver_imagens"])
+
+
+# ---------------------------------------------------------------- custo por projeto e por clipe
+
+class CustoPorClipe(Temporario):
+    def test_chamada_soma_no_projeto_e_na_medicao(self):
+        with mock.patch.object(config, "PASTA_PROJETOS", self.pasta), \
+                mock.patch.object(config, "ARQ_CUSTOS", self.pasta / "custos.json"):
+            (self.pasta / "projeto01").mkdir()
+            projetos.salvar({"id": "projeto01", "custo": 0.0, "clips": []})
+            uso = SimpleNamespace(input_tokens=1_000_000, output_tokens=0)
+            with custos.medir() as fora:
+                with custos.medir() as dentro:
+                    custos.registrar("claude-sonnet-5-5", uso, "projeto01", "tradução da legenda")
+                custos.registrar("claude-sonnet-5-5", uso, "projeto01", "escolha de cortes")
+            self.assertAlmostEqual(dentro["custo"], 2.0)
+            self.assertAlmostEqual(fora["custo"], 4.0)
+            meta = projetos.ler("projeto01")
+            self.assertAlmostEqual(meta["custo"], 4.0)
+            self.assertEqual(meta["custo_etapas"], {"tradução da legenda": 2.0, "escolha de cortes": 2.0})
+
+    def test_clipe_leva_o_proprio_mais_a_parte_do_projeto(self):
+        meta = {"custo": 0.10, "clips": [{"id": "a", "custo": 0.02}, {"id": "b"}, {"id": "c"}]}
+        # comum = 0,10 - 0,02 = 0,08 -> 0,0267 por clipe
+        r = pipeline.custo_dos_clipes(meta)
+        self.assertAlmostEqual(r["a"], 0.02 + 0.08 / 3, places=5)
+        self.assertAlmostEqual(r["b"], 0.08 / 3, places=5)
+        self.assertAlmostEqual(sum(r.values()), 0.10, places=5)
+        self.assertEqual(pipeline.custo_dos_clipes({"custo": 0.0, "clips": []}), {})

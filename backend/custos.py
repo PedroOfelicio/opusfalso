@@ -3,10 +3,14 @@ Estimativa de custo das chamadas ao Claude.
 
 Cada chamada registra tokens de entrada/saída; o total acumulado fica em
 DADOS/custos.json e aparece na tela Configurações e no fim do CLI.
+Também soma, na hora, no projeto (meta "custo" e "custo_etapas") e em quem estiver medindo com medir()
+(ex.: o custo próprio de um clipe).
 Preços em US$ por milhão de tokens (entrada, saída).
 """
+import logging
 import threading
 import time
+from contextlib import contextmanager
 
 import config
 
@@ -23,6 +27,36 @@ PRECOS = {
 PRECO_PADRAO = (3.00, 15.00)
 
 _trava = threading.Lock()
+_local = threading.local()
+
+
+@contextmanager
+def medir():
+    """Soma o custo das chamadas feitas nesta thread dentro do bloco:
+    with medir() as gasto: ...  ->  gasto["custo"]. Medições aninhadas somam também na de fora."""
+    de_fora = getattr(_local, "medida", None)
+    gasto = {"custo": 0.0}
+    _local.medida = gasto
+    try:
+        yield gasto
+    finally:
+        _local.medida = de_fora
+        if de_fora is not None:
+            de_fora["custo"] += gasto["custo"]
+
+
+def _somar_no_projeto(projeto_id: str, custo: float, motivo: str) -> None:
+    import projetos  # aqui dentro: projetos não depende de custos, mas evita ciclo na importação
+
+    def f(m):
+        m["custo"] = round((m.get("custo") or 0) + custo, 6)
+        etapas = m.setdefault("custo_etapas", {})
+        chave = motivo or "outros"
+        etapas[chave] = round(etapas.get(chave, 0) + custo, 6)
+    try:
+        projetos.atualizar(projeto_id, f)
+    except Exception as e:  # projeto apagado no meio: o custo fica só no total geral
+        logging.getLogger("custos").warning("Custo fora do projeto %s: %s", projeto_id, e)
 
 
 def calcular(modelo: str, tokens_entrada: int, tokens_saida: int) -> float:
@@ -48,6 +82,11 @@ def registrar(modelo: str, usage, projeto_id: str | None = None, motivo: str = "
         })
         dados["historico"] = dados["historico"][-500:]  # não deixa o arquivo crescer para sempre
         config.gravar_json(config.ARQ_CUSTOS, dados)
+    medida = getattr(_local, "medida", None)
+    if medida is not None:
+        medida["custo"] += custo
+    if projeto_id:
+        _somar_no_projeto(projeto_id, custo, motivo)
     return custo
 
 
