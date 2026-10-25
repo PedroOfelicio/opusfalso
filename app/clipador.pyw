@@ -83,11 +83,30 @@ def navegador_app() -> str | None:
     return None
 
 
+def tema_claro_na_janela() -> None:
+    """A barra de título (minimizar, maximizar, fechar) é desenhada pelo Edge/Chrome, que segue o tema do Windows:
+    no modo escuro ela fica preta sobre o app cinza-gelo. O perfil da janela é só do app (DADOS/janela), então
+    fixamos o tema claro nele. Só vale com o navegador desse perfil fechado (aberto, ele regrava as preferências
+    ao sair); por isso é conferido a cada abertura."""
+    arq = DADOS / "janela" / "Default" / "Preferences"
+    try:
+        prefs = json.loads(arq.read_text(encoding="utf-8")) if arq.exists() else {}
+        tema = prefs.setdefault("browser", {}).setdefault("theme", {})
+        if tema.get("color_scheme") == 1 and tema.get("color_scheme2") == 1:
+            return
+        tema.update(color_scheme=1, color_scheme2=1)  # 1 = claro (Edge usa uma chave, o Chrome a outra)
+        arq.parent.mkdir(parents=True, exist_ok=True)
+        arq.write_text(json.dumps(prefs, ensure_ascii=False), encoding="utf-8")
+    except (OSError, ValueError, AttributeError):
+        pass  # sem o tema claro a janela abre do mesmo jeito
+
+
 def abrir_janela(*_):
     exe = navegador_app()
     if not exe:
         webbrowser.open(URL)
         return
+    tema_claro_na_janela()
     subprocess.Popen([exe, f"--app={URL}", f"--user-data-dir={DADOS / 'janela'}", "--window-size=1440,900",
                       "--no-first-run", "--no-default-browser-check", "--disable-features=Translate"],
                      creationflags=SEM_JANELA)
