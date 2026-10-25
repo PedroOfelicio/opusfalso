@@ -384,7 +384,7 @@ class DirecaoDeArte(unittest.TestCase):
     def test_padrao_do_clima_completa_a_escolha(self):
         import direcao
         d = direcao.efetiva({"look": "frio"}, "energetica")
-        self.assertEqual((d["look"], d["transicao"], d["preset"]), ("frio", "zoom_rapido", "gamer"))
+        self.assertEqual((d["look"], d["transicao"], d["preset"]), ("frio", "risco", "gamer"))
         self.assertEqual(direcao.efetiva(None, None)["transicao"], "pulso")
 
     def test_transicao_so_nos_cortes_grandes(self):

@@ -15,7 +15,8 @@ Layouts:
 - "split":   gameplay em cima, facecam (ou vídeo de apoio) embaixo
 - "jogo":    gameplay em destaque: recorte 4:5 do centro (mira) ocupando ~70% da altura,
              fundo desfocado em cima (título) e embaixo
-- "dupla":   duas pessoas, uma em cima e outra embaixo
+- "pip":     como "jogo", com a facecam num quadro com borda colorida no canto (estilo YouTuber)
+- "dupla":  duas pessoas, uma em cima e outra embaixo
 - "auto":    escolhe sozinho conforme o modo e os rostos encontrados
 """
 import logging
@@ -342,14 +343,22 @@ def trajetoria_camera(analise: Analise, total_frames: int) -> tuple[np.ndarray, 
 
 
 def zoom_por_frame(total_frames: int, fps: float, momentos: list[tuple[float, float]], intensidade=0.12,
-                   base: list[tuple[float, float, float]] | None = None) -> np.ndarray:
+                   base: list[tuple[float, float, float]] | None = None,
+                   deriva: list[tuple[float, float]] | None = None, forca_deriva: float = 0.0) -> np.ndarray:
     """Fator de zoom (>=1) por frame: sobe em 0,2 s, segura e desce em 0,35 s (easing suave).
     `base` dá um zoom fixo por trecho (corte seco = mudança instantânea de enquadramento, o
-    "punch-in" que esconde o pulo do jump cut); os momentos de ênfase somam por cima."""
+    "punch-in" que esconde o pulo do jump cut); os momentos de ênfase somam por cima.
+    `deriva`: trechos em que a câmera vai fechando devagar e sem parar (até +forca_deriva no fim do trecho,
+    no mínimo em 2,5 s), e volta ao normal no corte seguinte: o zoom lento dos vídeos de gameplay."""
     t = np.arange(total_frames) / fps
     fixo = np.ones(total_frames)
     for a, b, fator in base or []:
         fixo[(t >= a) & (t < b)] = fator
+    if forca_deriva > 0:
+        for a, b in deriva or []:
+            dentro = (t >= a) & (t < b)
+            progresso = np.clip((t[dentro] - a) / max(b - a, 2.5), 0, 1)
+            fixo[dentro] *= 1 + forca_deriva * (1 - (1 - progresso) ** 1.5)  # rápido no começo, assenta no fim
     z = np.ones(total_frames)
     for a, b in momentos:
         subida = np.clip((t - (a - 0.1)) / 0.2, 0, 1)
@@ -411,6 +420,9 @@ class OpcoesRender:
     deslocamento_x: float = 0.0        # -1 (esquerda) .. 1 (direita), usado em "centro"
     zoom_momentos: list = field(default_factory=list)  # [(inicio, fim)] no tempo do clipe
     zoom_base: list = field(default_factory=list)      # [(inicio, fim, fator)]: zoom fixo por trecho (pulsos)
+    zoom_deriva: float = 0.0           # zoom lento contínuo em cada trecho (0 = desligado; 0,08 = fecha 8%)
+    segmentos: list = field(default_factory=list)      # [(inicio, fim)] de cada trecho entre cortes (tempo do clipe)
+    cor_borda: str | None = None       # borda da facecam (layouts "pip" e "split")
     barra_progresso: dict | None = None  # {"cor": "#FFE600", "altura": 10}
     arquivo_ass: str | None = None     # legenda para queimar (caminho relativo a DADOS)
     video_apoio: str | None = None     # vídeo para a metade de baixo no layout split
@@ -463,13 +475,15 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
     if layout == "centro" or (layout == "rosto" and not analise.trilhas):
         cx[:] = W / 2 + opc.deslocamento_x * (W / 2)
         cy[:] = H / 2
-    z = zoom_por_frame(total, fps, opc.zoom_momentos, intensidade=opc.zoom_intensidade, base=opc.zoom_base)
+    z = zoom_por_frame(total, fps, opc.zoom_momentos, intensidade=opc.zoom_intensidade, base=opc.zoom_base,
+                       deriva=opc.segmentos, forca_deriva=opc.zoom_deriva)
     efeitos = _efeitos_por_quadro(opc, total, fps, z)
 
-    facecam = _facecam(analise) if layout == "split" else None
+    facecam = _facecam(analise) if layout in ("split", "pip") else None
     apoio = cv2.VideoCapture(opc.video_apoio) if (layout == "split" and opc.video_apoio and not facecam) else None
-    if layout == "split" and not facecam and apoio is None:
+    if (layout == "split" and not facecam and apoio is None) or (layout == "pip" and not facecam):
         layout = "jogo"  # sem facecam nem vídeo de apoio
+    borda = _hex_bgr(opc.cor_borda) if opc.cor_borda else None
 
     dupla = None
     if layout == "dupla":
@@ -503,7 +517,7 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
                 break
             if cancelado is not None and cancelado.is_set():
                 raise Cancelado()
-            quadro = _compor(frame, layout, i, LW, LH, aspecto, cx, cy, z, facecam, apoio, dupla)
+            quadro = _compor(frame, layout, i, LW, LH, aspecto, cx, cy, z, facecam, apoio, dupla, borda)
             if opc.broll:
                 quadro = _sobrepor_broll(quadro, i / FPS_SAIDA, opc.broll, brolls, LW, LH)
             if i in efeitos:
@@ -555,7 +569,8 @@ def _sobrepor_broll(quadro, t: float, lista, abertos: dict, LW: int, LH: int):
     return quadro
 
 
-DURACAO_EFEITO = {"flash": 0.15, "zoom_rapido": 0.3, "desfoque": 0.25, "tremor": 0.3, "glitch": 0.15}
+DURACAO_EFEITO = {"flash": 0.15, "zoom_rapido": 0.3, "desfoque": 0.25, "tremor": 0.3, "glitch": 0.15,
+                  "risco": 0.28, "blur_zoom": 0.3}
 
 
 def _efeitos_por_quadro(opc: OpcoesRender, total: int, fps: float, z: np.ndarray) -> dict[int, tuple[str, float]]:
@@ -569,6 +584,12 @@ def _efeitos_por_quadro(opc: OpcoesRender, total: int, fps: float, z: np.ndarray
             forca = max(0.0, 1 - (i / fps - t) / dur)
             if tipo == "zoom_rapido":
                 z[i] *= 1 + 0.22 * forca * forca
+            elif tipo == "blur_zoom":
+                z[i] *= 1 + 0.18 * forca * forca
+                if forca > 0:
+                    efeitos[i] = (tipo, forca)
+            elif tipo == "risco":
+                efeitos[i] = (tipo, forca)  # o risco precisa do quadro final (forca 0 = já saiu da tela)
             elif forca > 0:
                 efeitos[i] = (tipo, forca)
     return efeitos
@@ -593,11 +614,68 @@ def _aplicar_efeito(q: np.ndarray, tipo: str, forca: float, i: int) -> np.ndarra
         faixa = slice(int(h * (0.3 + 0.4 * ((i * 37) % 10) / 10)), None)
         saida[faixa] = np.roll(saida[faixa], d * 2, axis=1)[: saida[faixa].shape[0]]
         return saida
+    if tipo == "risco":
+        return _risco(q, 1 - forca)
+    if tipo == "blur_zoom":
+        # Borrão radial: média com cópias cada vez mais ampliadas a partir do centro
+        acumulado = q.astype(np.float32)
+        passos = 3
+        for k in range(1, passos + 1):
+            s = 1 + 0.035 * k * forca
+            cw, ch = int(w / s), int(h / s)
+            x0, y0 = (w - cw) // 2, (h - ch) // 2
+            acumulado += cv2.resize(q[y0:y0 + ch, x0:x0 + cw], (w, h), interpolation=cv2.INTER_LINEAR)
+        return (acumulado / (passos + 1)).astype(np.uint8)
     return q
 
 
-def _compor(frame, layout, i, LW, LH, aspecto, cx, cy, z, facecam, apoio, dupla):
+_DIAGONAL: dict[tuple[int, int], np.ndarray] = {}
+
+
+def _risco(q: np.ndarray, p: float) -> np.ndarray:
+    """Faixa branca grossa (com um traço fino atrás) que cruza a tela na diagonal; p = 0 (entrando) .. 1 (saiu)."""
+    h, w = q.shape[:2]
+    soma = _DIAGONAL.get((h, w))
+    if soma is None:  # x + y de cada pixel: as faixas são intervalos dessa soma (linhas a 45°)
+        soma = _DIAGONAL[(h, w)] = np.add.outer(np.arange(h, dtype=np.int32), np.arange(w, dtype=np.int32))
+    total = h + w
+    grossa, fina, vao = int(0.07 * w), int(0.012 * w), int(0.03 * w)
+    frente = int(p * (total + grossa + vao + fina))  # p = 1: até o traço fino já passou do último pixel
+    saida = q.copy()
+    saida[(soma >= frente - grossa) & (soma < frente)] = 255
+    saida[(soma >= frente - grossa - vao - fina) & (soma < frente - grossa - vao)] = 255
+    return saida
+
+
+def _recorte_facecam(frame, facecam, largura: int, altura: int, folga: float = 2.4):
+    """Área ao redor do rosto da facecam (folga x a altura do rosto), no aspecto pedido."""
     H, W = frame.shape[:2]
+    fcx, fcy, fw, fh = facecam
+    ch2 = min(H, fh * folga)
+    cw2 = ch2 * largura / altura
+    if cw2 > W:
+        cw2, ch2 = W, W * altura / largura
+    bx0 = int(min(max(fcx - cw2 / 2, 0), W - cw2))
+    by0 = int(min(max(fcy - ch2 / 2, 0), H - ch2))
+    return cv2.resize(frame[by0:by0 + int(ch2), bx0:bx0 + int(cw2)], (largura, altura))
+
+
+def _compor(frame, layout, i, LW, LH, aspecto, cx, cy, z, facecam, apoio, dupla, borda=None):
+    H, W = frame.shape[:2]
+    if layout == "pip":
+        # Jogo em destaque + facecam num quadro 5:4 com borda colorida no canto de cima da janela do jogo
+        quadro = _compor(frame, "jogo", i, LW, LH, aspecto, cx, cy, z, None, None, None)
+        alto = int(min(LH, LW * 1.25))
+        pw = int(LW * 0.36) // 2 * 2
+        ph = int(pw * 0.8) // 2 * 2
+        margem = int(LW * 0.035)
+        # Abaixo do título gancho (que fica na borda de cima da janela do jogo nos primeiros segundos)
+        x, y = margem, int((LH - alto) * 0.45) + int(LH * 0.06)
+        quadro[y:y + ph, x:x + pw] = _recorte_facecam(frame, facecam, pw, ph, folga=2.6)
+        if borda:
+            espessura = max(4, LW // 160)
+            cv2.rectangle(quadro, (x, y), (x + pw - 1, y + ph - 1), borda, espessura)
+        return quadro
     if layout in ("rosto", "centro"):
         x0, y0, cw, ch = _recorte(W, H, aspecto, cx[i], cy[i], z[i])
         return cv2.resize(frame[y0:y0 + ch, x0:x0 + cw], (LW, LH), interpolation=cv2.INTER_LINEAR)
@@ -634,22 +712,18 @@ def _compor(frame, layout, i, LW, LH, aspecto, cx, cy, z, facecam, apoio, dupla)
         topo = cv2.resize(frame[y0:y0 + ch, x0:x0 + cw], (LW, alto_topo), interpolation=cv2.INTER_LINEAR)
         alto_base = LH - alto_topo
         if facecam:
-            fcx, fcy, fw, fh = facecam
-            # Área ao redor do rosto (2,4x a altura do rosto), no aspecto da metade de baixo
-            ch2 = min(H, fh * 2.4)
-            cw2 = ch2 * LW / alto_base
-            if cw2 > W:
-                cw2, ch2 = W, W * alto_base / LW
-            bx0 = int(min(max(fcx - cw2 / 2, 0), W - cw2))
-            by0 = int(min(max(fcy - ch2 / 2, 0), H - ch2))
-            base = cv2.resize(frame[by0:by0 + int(ch2), bx0:bx0 + int(cw2)], (LW, alto_base))
+            base = _recorte_facecam(frame, facecam, LW, alto_base)
         else:
             ok, fa = apoio.read()
             if not ok:  # vídeo de apoio acabou: volta ao início
                 apoio.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 ok, fa = apoio.read()
             base = _cobrir(fa, LW, alto_base) if ok else np.zeros((alto_base, LW, 3), np.uint8)
-        return np.vstack([topo, base])
+        quadro = np.vstack([topo, base])
+        if borda:  # faixa colorida na divisa entre o jogo e a facecam
+            meia = max(3, LW // 200)
+            cv2.rectangle(quadro, (0, alto_topo - meia), (LW, alto_topo + meia), borda, -1)
+        return quadro
 
     if layout == "dupla":
         metade = LH // 2

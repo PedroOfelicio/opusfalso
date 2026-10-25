@@ -29,6 +29,7 @@ import traducao
 import direcao
 import editor_ffmpeg as ef
 import legendas
+import memes
 import planejador_llm as llm
 import planejador_local as local
 import projetos
@@ -36,7 +37,7 @@ import reenquadramento as rq
 import transcricao as tr
 import youtube
 from config import Cancelado
-from modelos import CLIMAS, Corte, PlanoEdicao
+from modelos import CLIMAS, Corte, PlanoEdicao, Reacao
 
 log = logging.getLogger("pipeline")
 
@@ -48,6 +49,8 @@ ETAPAS = [
     ("legendando", "Legendando"),
 ]
 PESOS = {"transcrevendo": 0.25, "analisando": 0.08, "escolhendo": 0.07, "cortando": 0.2, "legendando": 0.4}
+COR_BORDA = "#1EA7FF"  # borda da facecam (azul-ciano dos vídeos de YouTuber de Roblox)
+FORCA_DERIVA = 0.08    # zoom lento: fecha 8% ao longo de cada trecho
 
 
 # ================================================================ progresso
@@ -188,6 +191,8 @@ def config_clip(meta: dict, clip: dict) -> dict:
     else:
         d = direcao.efetiva({}, None)
         preset_auto, cor_auto = leg["preset"], leg["cor"]
+    if c.get("preset", preset_auto) == "roblox" and d["transicao"] == "pulso":
+        d = {**d, "transicao": "risco"}  # o estilo YouTuber vem com o risco branco nas trocas de assunto
     return {
         "look": c.get("look", d["look"]),
         "transicao": c.get("transicao", d["transicao"]),
@@ -195,6 +200,7 @@ def config_clip(meta: dict, clip: dict) -> dict:
         "impacto": c.get("impacto", d["impacto"]),
         "broll": c.get("broll", bool(meta["opcoes"].get("broll"))),
         "reacoes": c.get("reacoes", bool(meta["opcoes"].get("reacoes"))),
+        "memes": c.get("memes", meta["opcoes"].get("memes", True)),  # só age se a pasta de memes tiver arquivos
         "idioma_legenda": c.get("idioma_legenda", meta["opcoes"].get("idioma_legenda") or ""),
         "replay": c.get("replay", meta["opcoes"].get("replay", True) if meta["modo"] == "gameplay" else False),
         "loop": c.get("loop", meta["opcoes"].get("loop", True)),
@@ -206,6 +212,9 @@ def config_clip(meta: dict, clip: dict) -> dict:
         "titulo_ativo": c.get("titulo_ativo", plano["titulo_gancho"]),
         "barra": c.get("barra", plano.get("barra_progresso")),
         "zoom": c.get("zoom", plano["zoom_em_enfase"]),
+        # Zoom lento contínuo entre os cortes: padrão no gameplay (a câmera nunca fica parada)
+        "deriva": c.get("deriva", meta["opcoes"].get("deriva", meta["modo"] == "gameplay")),
+        "cor_borda": c.get("cor_borda", meta["opcoes"].get("cor_borda") or COR_BORDA),
         "remover_silencios": c.get("remover_silencios", plano["remover_silencios"]),
         "normalizar": c.get("normalizar", plano["normalizar_audio"]),
         "musica": c["musica"] if "musica" in c else _musica_do_plano(meta, clip),
@@ -234,14 +243,16 @@ def _musica_do_plano(meta: dict, clip: dict) -> str | None:
 
 
 def _efeitos_sonoros(semente: str, titulo: bool, zoom: list, picos: list[float], duracao: float,
-                     transicao: float | None = None, replay: float | None = None) -> list:
-    """Whoosh na entrada do título e na volta da abertura com o clímax, impacto nos picos do
-    gameplay e pop nos zooms de ênfase. Espaçados (mín. 2,5 s) e no máximo 6 por clipe."""
+                     transicao: float | None = None, replay: float | None = None,
+                     cortes: list[float] | None = None) -> list:
+    """Whoosh na entrada do título, na volta da abertura com o clímax e nas transições dos cortes grandes,
+    impacto nos picos do gameplay e pop nos zooms de ênfase. Espaçados (mín. 2,5 s) e no máximo 7 por clipe."""
     candidatos = []
     if titulo:
         candidatos.append((0.05, "whoosh", 0.55))
     if transicao is not None:
         candidatos.append((max(0.0, transicao - 0.2), "whoosh", 0.6))
+    candidatos += [(max(0.0, t - 0.15), "whoosh", 0.5) for t in cortes or []]
     candidatos += [(max(0.0, t - 0.05), "grave", 0.9) for t in picos]       # o soco grave na kill
     candidatos += [(max(0.0, t - 1.45), "riser", 0.5) for t in picos if t > 2]  # a tensão subindo até ela
     candidatos += [(max(0.0, t - 0.05), "impacto", 0.8) for t in picos]
@@ -341,6 +352,7 @@ POSICAO_POR_LAYOUT = {
     "split": 0.57,    # gameplay em cima (até 60%) e facecam embaixo: na divisa, sem cobrir rosto nem mira
     "dupla": 0.50,    # duas pessoas uma sobre a outra: entre as duas
     "jogo": 0.885,    # janela do jogo vai de 13% a 84%: embaixo dela, longe da mira e do HUD
+    "pip": 0.885,     # igual ao "jogo" (a facecam fica no canto de cima da janela)
     "inteiro": 0.74,  # vídeo inteiro no meio, fundo desfocado: logo abaixo do vídeo
 }
 
@@ -349,6 +361,8 @@ def _layout_previsto(opc, analise) -> str:
     """O mesmo layout que o render vai usar (inclusive as trocas que ele faz quando falta rosto/facecam)."""
     layout = rq.escolher_layout(opc, analise)
     if layout == "split" and not rq._facecam(analise) and not opc.video_apoio:
+        return "jogo"
+    if layout == "pip" and not rq._facecam(analise):
         return "jogo"
     if layout == "dupla" and len(analise.trilhas) < 2:
         return "rosto"
@@ -477,14 +491,25 @@ def _preparar_corte(meta: dict, clip: dict, cfg: dict, palavras: list[dict], pid
     titulo = clip.get("titulo") if cfg["titulo_ativo"] else None
     if replay:
         zoom.append((inicio_replay, duracao))  # aproxima durante o replay
+    segmentos, t = [], 0.0
+    for a, b in partes:
+        segmentos.append((round(t, 3), round(t + b - a, 3)))
+        t += b - a
+    if replay:
+        segmentos.append((round(inicio_replay, 3), round(duracao, 3)))
+    cortes = direcao.cortes_grandes(partes, bool(abertura)) + ([round(inicio_replay, 3)] if replay else [])
+    # Whoosh nas transições visíveis (o pulso de zoom é discreto e não leva som)
+    ja_tem = [x for x in (desloc if abertura else None, inicio_replay) if x is not None]  # já levam whoosh
+    com_som = ([x for x in cortes if all(abs(x - y) > 0.05 for y in ja_tem)]
+               if cfg["transicao"] not in ("pulso", None) else [])
     efeitos = (_efeitos_sonoros(f"{pid}/{cid}", bool(titulo), legendas.momentos_de_zoom(pal_clip), picos, duracao,
-                                transicao=desloc if abertura else None, replay=inicio_replay)
+                                transicao=desloc if abertura else None, replay=inicio_replay, cortes=com_som)
                if cfg["efeitos"] else [])
 
     assinatura = repr((partes, cfg["normalizar"], cfg["musica"], efeitos, cfg["limpar_voz"], replay, cfg["loop"]))
     return {"trechos": trechos, "abertura": abertura, "partes": partes, "duracao": duracao, "pal_clip": pal_clip,
             "zoom": zoom, "zoom_base": zoom_base, "titulo": titulo, "efeitos": efeitos, "assinatura": assinatura,
-            "cortes": direcao.cortes_grandes(partes, bool(abertura)) + ([round(inicio_replay, 3)] if replay else []),
+            "cortes": cortes, "segmentos": segmentos,
             "impactos": picos if meta["modo"] == "gameplay" else [], "replay": replay, "inicio_replay": inicio_replay}
 
 
@@ -566,15 +591,20 @@ def _renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progre
     barra = dict(est.get("barra_progresso") or {})
     if cfg["barra"] is not None:
         barra["ativa"] = cfg["barra"]
+    brolls = _brolls(pid, clip, cfg, p["partes"])
+    reacoes = _reacoes(clip, cfg, p["partes"], bool(titulo), largura)
+    if p["replay"]:
+        reacoes.append((round(p["inicio_replay"] + 0.1, 3), enfeites.figurinha_reacao("REPLAY", largura, 2)))
+    if cfg["memes"]:
+        _memes(pal_clip, f"{pid}/{cid}", duracao, p["inicio_replay"], bool(titulo), largura, brolls, reacoes)
     opc = rq.OpcoesRender(
         formato=cfg["formato"], layout=cfg["layout"], modo=meta["modo"], deslocamento_x=cfg["deslocamento_x"],
         zoom_momentos=zoom, zoom_base=zoom_base, video_apoio=cfg["video_apoio"],
+        zoom_deriva=FORCA_DERIVA if cfg["deriva"] else 0.0, segmentos=p["segmentos"], cor_borda=cfg["cor_borda"],
         barra_progresso={"cor": est["cor_destaque"], "altura": barra.get("altura", 10)} if barra.get("ativa") else None,
         look=direcao.filtro_look(cfg["look"]), zoom_intensidade=direcao.ZOOMS.get(cfg["zoom_forca"], 0.12),
         transicao=cfg["transicao"], cortes=p["cortes"], impacto=cfg["impacto"], impactos=p["impactos"],
-        broll=_brolls(pid, clip, cfg, p["partes"]),
-        reacoes=_reacoes(clip, cfg, p["partes"], bool(titulo), largura)
-        + ([(round(p["inicio_replay"] + 0.1, 3), enfeites.figurinha_reacao("REPLAY", largura, 2))] if p["replay"] else []),
+        broll=brolls, reacoes=reacoes,
     )
 
     # Legenda que não tampa nada: a altura depende do enquadramento (que já dá para saber agora)
@@ -651,8 +681,24 @@ def _reacoes(clip: dict, cfg: dict, partes: list, com_titulo: bool, largura: int
         t = posicoes[-1][0]
         if t < (4.2 if com_titulo else 1.0) or any(abs(t - x) < 2.0 for x, _ in saida):
             continue  # o título ocupa os primeiros segundos; duas reações coladas cansam
-        saida.append((round(t, 3), enfeites.figurinha_reacao(r["texto"], largura, k)))
+        saida.append((round(t, 3), enfeites.figurinha_reacao(r["texto"], largura, r.get("estilo") or k)))
     return saida
+
+
+def _memes(pal_clip: list[dict], semente: str, duracao: float, inicio_replay: float | None, com_titulo: bool,
+           largura: int, brolls: list, reacoes: list) -> None:
+    """Memes da pasta do usuário pelas palavras do clipe: imagem vira figurinha (junto das reações), vídeo cobre a
+    tela como um b-roll. Fora do título, do replay e longe dos textos de impacto e b-rolls já marcados."""
+    fim_util = min(duracao, inicio_replay) if inicio_replay else duracao
+    for t, arquivo, tipo in memes.escolher(pal_clip, semente, fim_util, inicio_min=4.2 if com_titulo else 1.0):
+        if any(abs(t - x) < 2.0 for x, _ in reacoes) or any(a - 1.0 < t < b + 1.0 for a, b, _ in brolls):
+            continue
+        if tipo == "imagem":
+            fig = memes.figurinha(arquivo, largura)
+            if fig is not None:
+                reacoes.append((t, fig))
+        else:
+            brolls.append((t, round(min(t + memes.DURACAO_VIDEO, fim_util), 3), arquivo))
 
 
 def _capa(meta: dict, clip: dict, corte: Path, saida_dir: Path, cid: str) -> str | None:
@@ -1146,6 +1192,13 @@ def _folha_de_quadros(video, inicio: float, fim: float, n: int = 8, largura: int
     return buf.tobytes() if ok else None
 
 
+def _completar_reacoes(cortes: list[Corte], palavras: list[dict]) -> None:
+    """Sem IA (ou se o Claude não sugeriu nenhum): textos de impacto pelas palavras-chave da fala."""
+    for c in cortes:
+        if not c.reacoes:
+            c.reacoes = [Reacao(**r) for r in local.reacoes_por_palavras(palavras, c.inicio, c.fim, c.pico)]
+
+
 def _novo_clip(cid: str, corte: Corte) -> dict:
     return {
         "id": cid, "inicio": corte.inicio, "fim": corte.fim, "titulo": corte.titulo, "nota": corte.nota,
@@ -1224,6 +1277,7 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
                     f"{plano.duracao_min:.0f}-{plano.duracao_max:.0f} s sem repetir trechos. Para mais clipes, "
                     "use um vídeo mais longo ou uma duração menor.")
     cortes.sort(key=lambda c: c.nota, reverse=True)
+    _completar_reacoes(cortes, transcricao["palavras"])
     clips = [_novo_clip(f"clip_{i:02d}", c) for i, c in enumerate(cortes, 1)]
     prontos = sum(_reaproveitar(c, antigos.get(c["id"])) for c in clips)
     if retomar:
@@ -1330,6 +1384,7 @@ def regenerar_clip(pid: str, cid: str, progresso=None, cancelado=None) -> dict:
     if not novos:
         somar_custo_clipes(pid, [cid], gasto["custo"])  # a busca custou, mesmo sem achar nada
         raise ValueError("Não encontrei outro trecho bom que ainda não tenha virado clipe.")
+    _completar_reacoes(novos[:1], transcricao["palavras"])
     novo = _novo_clip(cid, novos[0])
 
     def f(m):

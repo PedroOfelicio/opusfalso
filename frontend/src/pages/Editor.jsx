@@ -8,7 +8,7 @@ import { api, CLIMAS, formatarTempoPreciso } from "../api";
 import ScoreBadge from "../components/ScoreBadge";
 import { Alternador, Aviso, Botao, EstadoErro, Esqueleto, Segmentado, usePolling, useAvisar } from "../components/ui";
 
-const CHAVES = ["look", "transicao", "zoom_forca", "impacto", "broll", "reacoes", "idioma_legenda", "replay", "loop", "formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom", "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura", "limpar_voz"];
+const CHAVES = ["look", "transicao", "zoom_forca", "impacto", "broll", "reacoes", "idioma_legenda", "replay", "loop", "formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom", "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura", "limpar_voz", "deriva", "cor_borda", "memes"];
 const CORES_RAPIDAS = ["#FFE600", "#22FF6B", "#3B82F6", "#FF4FD8", "#FF8A00", "#FFFFFF"];
 const LAYOUTS = [
   { id: "auto", rotulo: "Automático", texto: "Escolhe conforme o vídeo e os rostos encontrados" },
@@ -18,6 +18,7 @@ const LAYOUTS = [
   { id: "inteiro", rotulo: "Vídeo inteiro", texto: "Vídeo completo no meio com fundo desfocado" },
   { id: "jogo", rotulo: "Gameplay em destaque", texto: "Recorte 4:5 grande no centro da mira" },
   { id: "split", rotulo: "Gameplay + facecam", texto: "Jogo em cima, facecam ou vídeo de apoio embaixo" },
+  { id: "pip", rotulo: "Facecam no canto", texto: "Jogo em destaque, facecam num quadro com borda colorida" },
 ];
 const ABAS = [
   { id: "legendas", rotulo: "Legendas", icone: Subtitles },
@@ -40,7 +41,7 @@ function rascunhoDe(clip) {
 }
 
 const LOOKS = { natural: "Natural", vibrante: "Vibrante", cinema: "Cinema", quente: "Quente", frio: "Frio", dramatico: "Dramático", preto_branco: "Preto e branco", retro: "Retrô" };
-const TRANSICOES = { pulso: "Só pulso de zoom", flash: "Flash", zoom_rapido: "Zoom rápido", desfoque: "Desfoque", tremor: "Tremor", glitch: "Glitch" };
+const TRANSICOES = { pulso: "Só pulso de zoom", flash: "Flash", zoom_rapido: "Zoom rápido", desfoque: "Desfoque", tremor: "Tremor", glitch: "Glitch", risco: "Risco branco", blur_zoom: "Blur-zoom" };
 
 export default function Editor() {
   const { id, cid } = useParams();
@@ -395,7 +396,21 @@ export default function Editor() {
                     <input type="range" min={-1} max={1} step={0.02} value={cfg.deslocamento_x || 0} onChange={(e) => mudarConfig("deslocamento_x", Number(e.target.value))} className="w-full accent-roxo" />
                   </div>
                 )}
+                {(cfg.layout === "pip" || cfg.layout === "split") && (
+                  <div>
+                    <div className="text-xs text-suave mb-1.5">Cor da borda da facecam</div>
+                    <div className="flex items-center gap-2">
+                      {["#1EA7FF", "#FFE600", "#FF3B3B", "#22FF6B", "#FFFFFF"].map((c) => (
+                        <button key={c} onClick={() => mudarConfig("cor_borda", c)} title={c}
+                          className={`size-7 rounded-full border-2 cursor-pointer ${cfg.cor_borda === c ? "border-texto" : "border-borda"}`} style={{ background: c }} />
+                      ))}
+                      <input type="color" value={cfg.cor_borda || "#1EA7FF"} onChange={(e) => mudarConfig("cor_borda", e.target.value.toUpperCase())} className="size-7 cursor-pointer bg-transparent" />
+                    </div>
+                  </div>
+                )}
                 <Alternador ativo={!!cfg.zoom} aoMudar={(v) => mudarConfig("zoom", v)} rotulo="Zoom automático" descricao="Aproxima suavemente nas palavras de ênfase e nos picos (gameplay)" />
+                <Alternador ativo={!!cfg.deriva} aoMudar={(v) => mudarConfig("deriva", v)} rotulo="Zoom lento contínuo" descricao="A câmera vai fechando devagar em cada trecho e volta no corte" />
+                <Alternador ativo={!!cfg.memes} aoMudar={(v) => mudarConfig("memes", v)} rotulo="Memes da sua pasta" descricao="Entram quando a fala cita o nome do arquivo (Configurações > Memes)" />
                 {clip.pico != null && (
                   <Alternador ativo={!!cfg.replay} aoMudar={(v) => mudarConfig("replay", v)} rotulo="Replay em câmera lenta" descricao="O lance repete no fim, a meia velocidade" />
                 )}
@@ -404,7 +419,7 @@ export default function Editor() {
                   <Alternador
                     ativo={!!cfg.reacoes}
                     aoMudar={(v) => mudarConfig("reacoes", v)}
-                    rotulo="Textos de reação"
+                    rotulo="Textos de impacto"
                     descricao={clip.reacoes.map((r) => `“${r.texto}”`).join(", ")}
                   />
                 )}

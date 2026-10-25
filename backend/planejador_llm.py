@@ -309,6 +309,9 @@ Critérios:
   clipe e depois dos 4 primeiros segundos), como um editor de cortes faria: no susto, na virada, na fala
   absurda, na risada. Curtos (até 18 caracteres), no idioma do vídeo, sem emoji: "ESPERA...", "KKKKKK",
   "QUE ISSO?!", "CLUTCH!", "ELE FALOU MESMO". Só onde a reação aumenta a graça ou a tensão; vazio se não houver.
+  estilo (opcional) muda o visual, como nos vídeos de YouTuber: "impacto" (vermelho grosso: "PRESO!", "MORREU!"),
+  "etiqueta" (caixa vermelha: "CORRE!!"), "dinheiro" (verde: "+1000 ROBUX", "VITÓRIA!"), "carimbo" (selo
+  inclinado: "EXPOSED", "BANIDO"); omita para o padrão.
 - Termine, quando der, num ponto que emende com o começo quando o vídeo repetir sozinho (loop): uma pergunta,
   uma frase que puxa a primeira, uma reação. Repetição conta como visualização.
 - Ordene do melhor para o pior."""
@@ -432,6 +435,9 @@ Escolha os melhores e responda APENAS com JSON válido, sem markdown:
   clipe e depois dos 4 primeiros segundos), como um editor de cortes faria: no susto, na virada, na fala
   absurda, na risada. Curtos (até 18 caracteres), no idioma do vídeo, sem emoji: "ESPERA...", "KKKKKK",
   "QUE ISSO?!", "CLUTCH!", "ELE FALOU MESMO". Só onde a reação aumenta a graça ou a tensão; vazio se não houver.
+  estilo (opcional) muda o visual, como nos vídeos de YouTuber: "impacto" (vermelho grosso: "PRESO!", "MORREU!"),
+  "etiqueta" (caixa vermelha: "CORRE!!"), "dinheiro" (verde: "+1000 ROBUX", "VITÓRIA!"), "carimbo" (selo
+  inclinado: "EXPOSED", "BANIDO"); omita para o padrão.
 - Termine, quando der, num ponto que emende com o começo quando o vídeo repetir sozinho (loop): uma pergunta,
   uma frase que puxa a primeira, uma reação. Repetição conta como visualização.
 - Ordene do melhor para o pior."""

@@ -138,5 +138,37 @@
       "cor": "#22D3EE",
       "altura": 10
     }
+  },
+  "roblox": {
+    "nome": "Roblox",
+    "descricao": "Estilo YouTuber de Roblox: 1-2 palavras em minúsculas, pop elástico, sombra dura, palavra-chave em amarelo",
+    "fonte": "Montserrat Black",
+    "arquivo_fonte": "Montserrat-Black.ttf",
+    "tamanho": 84,
+    "maiusculas": false,
+    "pontuacao": true,
+    "cor_texto": "#FFFFFF",
+    "cor_destaque": "#FFD400",
+    "cor_contorno": "#000000",
+    "contorno": 4,
+    "sombra": 7,
+    "sombra_dura": true,
+    "posicao_y": 0.7,
+    "palavras_por_vez": 2,
+    "animacao": "elastico",
+    "escala_pop": 1.15,
+    "duracao_pop_ms": 130,
+    "destaque": "enfase",
+    "emoji": false,
+    "titulo": {
+      "cor_fundo": "#FFD400",
+      "cor_texto": "#000000",
+      "tamanho": 64
+    },
+    "barra_progresso": {
+      "ativa": false,
+      "cor": "#FFD400",
+      "altura": 8
+    }
   }
 }

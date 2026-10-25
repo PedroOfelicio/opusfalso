@@ -80,8 +80,8 @@ def agrupar(palavras: list[dict], max_palavras: int = 3, max_chars: int = 18, pa
     return grupos
 
 
-def _texto(p: str, maiusculas: bool) -> str:
-    p = p.strip().strip(PONTUACAO_REMOVIDA)
+def _texto(p: str, maiusculas: bool, pontuacao: bool = False) -> str:
+    p = p.strip() if pontuacao else p.strip().strip(PONTUACAO_REMOVIDA)
     p = p.replace("{", "(").replace("}", ")")
     return p.upper() if maiusculas else p
 
@@ -109,6 +109,8 @@ def gerar_ass(palavras: list[dict], est: dict, saida: str | Path, largura: int, 
     max_chars = int(largura * 0.88 / (tam * largura_char))
     y = int(altura * est.get("posicao_y", 0.68))
     tit = est.get("titulo", {})
+    # Sombra dura (estilo YouTuber): deslocada e sem transparência; senão, sombra suave translúcida
+    cor_sombra = "&H00000000" if est.get("sombra_dura") else "&H96000000"
     tam_tit = int(tit.get("tamanho", 64) * 1.35 * escala)  # título grande: é o gancho em texto
 
     linhas = [
@@ -118,7 +120,7 @@ def gerar_ass(palavras: list[dict], est: dict, saida: str | Path, largura: int, 
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, "
         "Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
         f"Style: Legenda,{fonte},{tam},{_ass_cor(est['cor_texto'])},&H000000FF,{_ass_cor(est['cor_contorno'])},"
-        f"&H96000000,0,0,0,0,100,100,1,0,1,{est.get('contorno', 8) * escala:.1f},{est.get('sombra', 4) * escala:.1f},5,60,60,0,1",
+        f"{cor_sombra},0,0,0,0,100,100,1,0,1,{est.get('contorno', 8) * escala:.1f},{est.get('sombra', 4) * escala:.1f},5,60,60,0,1",
         # BorderStyle 3 = caixa opaca atrás do texto (a cor da caixa é a OutlineColour)
         f"Style: Titulo,{est['fonte']},{tam_tit},{_ass_cor(tit.get('cor_texto', '#000000'))},&H000000FF,"
         f"{_ass_cor(tit.get('cor_fundo', '#FFE600'))},&H64000000,0,0,0,0,100,100,0,0,3,{18 * escala:.1f},0,8,90,90,{int(altura * 0.13)},1",
@@ -135,6 +137,7 @@ def gerar_ass(palavras: list[dict], est: dict, saida: str | Path, largura: int, 
     if legenda_ativa and palavras:
         destaque = _ass_cor(est["cor_destaque"])
         maius = est.get("maiusculas", True)
+        pont = bool(est.get("pontuacao"))
         pop = est.get("animacao", "pop") == "pop"
         escala_pop = int(est.get("escala_pop", 1.15) * 100)
         meio = int(est.get("duracao_pop_ms", 120) / 2)
@@ -143,6 +146,13 @@ def gerar_ass(palavras: list[dict], est: dict, saida: str | Path, largura: int, 
             inicio_grupo = grupo[0]["i"]
             proximo = grupos[gi + 1][0]["i"] if gi + 1 < len(grupos) else duracao
             fim_grupo = min(proximo, grupo[-1]["f"] + 0.6)
+            if est.get("destaque") == "enfase":
+                # Só as palavras-chave mudam de cor: uma linha por grupo, que entra com a animação do estilo
+                partes = [("{" + rf"\c{destaque}" + "}" + _texto(w["p"], maius, pont) + r"{\r}") if w.get("enfase")
+                          else _texto(w["p"], maius, pont) for w in grupo]
+                texto = "{" + rf"\an5\pos({largura // 2},{y}){_entrada(est)}" + "}" + " ".join(partes)
+                linhas.append(f"Dialogue: 0,{_tempo(inicio_grupo)},{_tempo(fim_grupo)},Legenda,,0,0,0,,{texto}")
+                continue
             for k, w in enumerate(grupo):
                 t0 = inicio_grupo if k == 0 else w["i"]
                 t1 = grupo[k + 1]["i"] if k + 1 < len(grupo) else fim_grupo
@@ -150,7 +160,7 @@ def gerar_ass(palavras: list[dict], est: dict, saida: str | Path, largura: int, 
                     continue
                 partes = []
                 for j, outra in enumerate(grupo):
-                    txt = _texto(outra["p"], maius)
+                    txt = _texto(outra["p"], maius, pont)
                     if j == k:
                         efeito = rf"\c{destaque}"
                         if pop:
@@ -159,7 +169,7 @@ def gerar_ass(palavras: list[dict], est: dict, saida: str | Path, largura: int, 
                         partes.append("{" + efeito + "}" + txt + r"{\r}")
                     else:
                         partes.append(txt)
-                entrada = r"\fad(80,0)" if (k == 0 and not pop) else ""
+                entrada = _entrada(est) if k == 0 else ""
                 texto = "{" + rf"\an5\pos({largura // 2},{y}){entrada}" + "}" + " ".join(partes)
                 linhas.append(f"Dialogue: 0,{_tempo(t0)},{_tempo(t1)},Legenda,,0,0,0,,{texto}")
 
@@ -167,6 +177,17 @@ def gerar_ass(palavras: list[dict], est: dict, saida: str | Path, largura: int, 
     saida.parent.mkdir(parents=True, exist_ok=True)
     saida.write_text("\n".join(linhas) + "\n", encoding="utf-8-sig")
     return saida
+
+
+def _entrada(est: dict) -> str:
+    """Animação de entrada do grupo no ASS. "elastico": nasce pequeno e borrado, passa do tamanho e assenta."""
+    animacao = est.get("animacao", "pop")
+    if animacao == "elastico":
+        dur = int(est.get("duracao_pop_ms", 130))
+        meio, pico = int(dur * 0.45), int(est.get("escala_pop", 1.15) * 100)
+        return (rf"\fscx40\fscy40\blur4\t(0,{meio},\fscx{pico}\fscy{pico}\blur0)"
+                rf"\t({meio},{dur},\fscx100\fscy100)")
+    return "" if animacao == "pop" else r"\fad(80,0)"
 
 
 def momentos_de_zoom(palavras_clipe: list[dict]) -> list[tuple[float, float]]:
@@ -204,7 +225,7 @@ def grupos_para_remotion(palavras: list[dict], est: dict, largura: int, altura: 
         proximo = grupos[gi + 1][0]["i"] if gi + 1 < len(grupos) else duracao
         resultado.append({
             "inicio": g[0]["i"], "fim": min(proximo, g[-1]["f"] + 0.6),
-            "palavras": [{"p": _texto(w["p"], est.get("maiusculas", True)), "i": w["i"], "f": w["f"],
+            "palavras": [{"p": _texto(w["p"], est.get("maiusculas", True), bool(est.get("pontuacao"))), "i": w["i"], "f": w["f"],
                           "enfase": bool(w.get("enfase")), "emoji": w.get("emoji")} for w in g],
         })
     return resultado

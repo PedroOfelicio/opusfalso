@@ -69,11 +69,24 @@ const Legenda: React.FC<{ grupos: Grupo[]; estilo: Estilo; escala: number }> = (
   const grupo = grupos.find((g) => t >= g.inicio && t < g.fim);
   if (!grupo) return null;
 
-  // Entrada do grupo: cresce levemente e aparece
-  const entrada = spring({ frame: Math.round((t - grupo.inicio) * fps), fps, config: { damping: 14, stiffness: 220 } });
-  const emoji = grupo.palavras.find((w) => w.emoji && t >= w.i)?.emoji;
+  // Entrada do grupo: cresce levemente e aparece. "elastico": nasce com 40% e borrado, passa do
+  // tamanho (escala_pop) e assenta em ~130 ms, como nos vídeos de YouTuber
+  const desde = t - grupo.inicio;
+  const entrada = spring({ frame: Math.round(desde * fps), fps, config: { damping: 14, stiffness: 220 } });
+  const elastico = estilo.animacao === "elastico";
+  const durEntrada = (estilo.duracao_pop_ms || 130) / 1000;
+  const escalaGrupo = elastico
+    ? interpolate(desde, [0, durEntrada * 0.45, durEntrada], [0.4, estilo.escala_pop, 1], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+        easing: Easing.out(Easing.quad),
+      })
+    : 0.85 + 0.15 * entrada;
+  const borrao = elastico ? interpolate(desde, [0, durEntrada * 0.45], [6, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) : 0;
+  const emoji = estilo.emoji === false ? undefined : grupo.palavras.find((w) => w.emoji && t >= w.i)?.emoji;
   const tamanho = estilo.tamanho * escala;
   const contorno = estilo.contorno * escala;
+  const sombra = estilo.sombra * escala;
 
   return (
     <div
@@ -82,8 +95,9 @@ const Legenda: React.FC<{ grupos: Grupo[]; estilo: Estilo; escala: number }> = (
         top: estilo.posicao_y * height,
         left: "6%",
         width: "88%",
-        transform: `translateY(-50%) scale(${0.85 + 0.15 * entrada})`,
-        opacity: Math.min(1, entrada * 1.5),
+        transform: `translateY(-50%) scale(${escalaGrupo})`,
+        opacity: elastico ? 1 : Math.min(1, entrada * 1.5),
+        filter: borrao > 0.05 ? `blur(${borrao * escala}px)` : undefined,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -115,18 +129,21 @@ const Legenda: React.FC<{ grupos: Grupo[]; estilo: Estilo; escala: number }> = (
                 })
               : 1;
           const jaFalada = t >= w.i;
+          const colorida = estilo.destaque === "enfase" ? w.enfase : ativa;
           return (
             <span
               key={k}
               style={{
                 display: "inline-block",
-                color: ativa ? estilo.cor_destaque : estilo.cor_texto,
+                color: colorida ? estilo.cor_destaque : estilo.cor_texto,
                 transform: `scale(${pop})`,
                 // no estilo "fade" as palavras ainda não faladas ficam mais apagadas
                 opacity: estilo.animacao === "fade" && !jaFalada ? 0.55 : 1,
                 WebkitTextStroke: `${contorno * 2}px ${estilo.cor_contorno}`,
                 paintOrder: "stroke fill",
-                textShadow: `0 ${estilo.sombra * escala}px ${estilo.sombra * 2 * escala}px rgba(0,0,0,0.55)`,
+                textShadow: estilo.sombra_dura
+                  ? `${sombra}px ${sombra}px 0 ${estilo.cor_contorno}`
+                  : `0 ${sombra}px ${sombra * 2}px rgba(0,0,0,0.55)`,
               }}
             >
               {w.p}

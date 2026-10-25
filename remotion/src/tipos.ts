@@ -20,9 +20,12 @@ export type Estilo = {
   contorno: number;
   sombra: number;
   posicao_y: number;
-  animacao: "pop" | "fade" | string;
+  animacao: "pop" | "fade" | "elastico" | string;
   escala_pop: number;
   duracao_pop_ms: number;
+  sombra_dura?: boolean;            // sombra deslocada, sem desfoque (estilo YouTuber)
+  destaque?: "falada" | "enfase";   // "enfase": só as palavras-chave mudam de cor
+  emoji?: boolean;                  // false: não mostra os emojis sugeridos
   titulo?: { cor_fundo: string; cor_texto: string; tamanho: number };
   barra_progresso?: { ativa: boolean; cor: string; altura: number };
 };

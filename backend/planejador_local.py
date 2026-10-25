@@ -217,6 +217,48 @@ def escolher_cortes_falado(transcricao: dict, plano: PlanoEdicao, excluir=None, 
     return cortes
 
 
+# ================================================================ textos de impacto (sem IA)
+
+# (palavras sem acento que disparam, texto na tela, estilo da figurinha). Expressões de 2 palavras valem
+# juntas ("meu deus"). Português e inglês: muito gameplay é narrado com termos do jogo em inglês.
+IMPACTOS_POR_PALAVRA = [
+    (("corre", "corram", "correr", "foge", "run"), "CORRE!!", "etiqueta"),
+    (("socorro", "help"), "SOCORRO!", "etiqueta"),
+    (("preso", "presa", "presos", "travado", "trapped", "stuck"), "PRESO!", "impacto"),
+    (("morri", "morreu", "morto", "mataram", "died", "dead"), "MORREU!", "impacto"),
+    (("meu deus", "mds", "omg", "nossa senhora"), "MEU DEUS!", "impacto"),
+    (("nao acredito", "impossivel"), "QUE?!", "impacto"),
+    (("ganhei", "venci", "vencemos", "ganhamos", "vitoria", "won"), "VITÓRIA!", "dinheiro"),
+    (("robux", "dinheiro", "grana", "rico", "rica", "milionario", "money"), "$$$", "dinheiro"),
+    (("banido", "banida", "ban", "banned", "expulso"), "BANIDO", "carimbo"),
+    (("hacker", "hackeado", "hackearam", "hack"), "HACKER", "carimbo"),
+    (("exposto", "exposed", "golpe", "golpista", "scam", "scammer", "fake"), "EXPOSED", "carimbo"),
+    (("espera", "pera", "wait"), "ESPERA...", None),
+    (("kkkk", "kkkkk", "kkkkkk", "hahaha", "hahahaha", "rsrs"), "KKKKK", None),
+]
+
+
+def reacoes_por_palavras(palavras: list[dict], inicio: float, fim: float, pico: float | None = None,
+                         maximo: int = 2, espaco: float = 3.0) -> list[dict]:
+    """Textos de impacto do trecho [inicio, fim] por palavra-chave (custo zero). Sem nenhuma e com pico de
+    ação (gameplay), põe um "QUE ISSO?!" no pico. Cada texto aparece uma vez; espaçados de `espaco` s."""
+    trecho = [w for w in palavras if inicio <= w["i"] <= fim]
+    limpas = [_sem_acento(_limpa(w["p"])) for w in trecho]
+    achados = []
+    for k, (w, p) in enumerate(zip(trecho, limpas)):
+        dupla = f"{p} {limpas[k + 1]}" if k + 1 < len(limpas) else ""
+        for gatilhos, texto, estilo in IMPACTOS_POR_PALAVRA:
+            if (p in gatilhos or dupla in gatilhos) and all(texto != a["texto"] for a in achados):
+                if all(abs(w["i"] - a["t"]) >= espaco for a in achados):
+                    achados.append({"t": round(w["i"], 2), "texto": texto, "estilo": estilo})
+                break
+        if len(achados) >= maximo:
+            break
+    if not achados and pico is not None and inicio <= pico <= fim:
+        achados.append({"t": round(pico, 2), "texto": "QUE ISSO?!", "estilo": "impacto"})
+    return achados
+
+
 # ================================================================ ajustes
 
 def interpretar_ajuste(pedido: str, clipes: list[dict]) -> AjusteClips:

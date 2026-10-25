@@ -1,7 +1,7 @@
 // Configurações: chave da API, modelo, pasta de saída, GPU/Whisper e custo acumulado.
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { ChevronDown, Copy, Cpu, DollarSign, Download, Eye, EyeOff, FolderOpen, HardDrive, KeyRound, Music, Pause, Play, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { ChevronDown, Copy, Cpu, DollarSign, Download, Eye, EyeOff, FolderOpen, HardDrive, KeyRound, Laugh, Music, Pause, Play, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { api, CLIMAS, formatarCusto } from "../api";
 import { Alternador, Aviso, Botao, Confirmar, EstadoErro, Esqueleto, useAvisar } from "../components/ui";
 
@@ -222,6 +222,7 @@ export default function Configuracoes() {
       </Secao>
 
       <BibliotecaAudio />
+      <PastaMemes />
 
       <Armazenamento />
 
@@ -539,6 +540,44 @@ function BibliotecaAudio() {
           <div className="flex flex-wrap items-center gap-3">
             <Botao tamanho="sm" variante="fantasma" icone={FolderOpen} onClick={() => api.abrirPastaAudio()}>Abrir a pasta</Botao>
             <span className="text-xs text-apagado">Para usar as suas, solte arquivos em musica\&lt;clima&gt; ou efeitos\&lt;tipo&gt;. O volume de cada faixa é igualado sozinho.</span>
+          </div>
+        </div>
+      )}
+    </Secao>
+  );
+}
+
+function PastaMemes() {
+  const [dados, setDados] = useState(null);
+  const carregar = () => api.memes().then(setDados).catch(() => setDados(false));
+  useEffect(() => {
+    carregar();
+  }, []);
+
+  return (
+    <Secao id="memes" icone={Laugh} titulo="Memes e figurinhas" descricao="Suas imagens e vídeos curtos entram no clipe quando a fala cita o nome do arquivo.">
+      {dados === null ? (
+        <Esqueleto className="h-16" />
+      ) : dados === false ? (
+        <p className="text-sm text-suave">Não consegui ler a pasta de memes.</p>
+      ) : (
+        <div className="space-y-3">
+          {dados.total > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {dados.itens.slice(0, 40).map((m) => (
+                <span key={m.nome} className="text-xs px-2.5 py-1 rounded-full border border-borda" title={m.nome}>
+                  {m.tipo === "video" ? "🎬" : "🖼️"} {m.palavras.join(", ")}
+                </span>
+              ))}
+              {dados.total > 40 && <span className="text-xs text-apagado self-center">+{dados.total - 40}</span>}
+            </div>
+          ) : (
+            <p className="text-sm text-suave">Pasta vazia: nenhum meme entra nos clipes.</p>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <Botao tamanho="sm" variante="fantasma" icone={FolderOpen} onClick={() => api.abrirPastaMemes()}>Abrir a pasta</Botao>
+            <Botao tamanho="sm" variante="fantasma" onClick={carregar}>Atualizar</Botao>
+            <span className="text-xs text-apagado">Ex.: rindo.png entra quando alguém fala “rindo”; susto_grito.mp4, com “susto” ou “grito”. Png com fundo transparente fica melhor.</span>
           </div>
         </div>
       )}

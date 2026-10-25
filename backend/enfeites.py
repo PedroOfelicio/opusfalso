@@ -21,10 +21,16 @@ def _fonte(tamanho: int):
     return ImageFont.truetype(str(config.PASTA_FONTES / "Anton-Regular.ttf"), tamanho)
 
 
-def figurinha_reacao(texto: str, largura_tela: int, estilo: int = 0) -> np.ndarray:
-    """Texto de reação como imagem BGRA (para o render compor com transparência)."""
+def figurinha_reacao(texto: str, largura_tela: int, estilo: int | str | None = 0) -> np.ndarray:
+    """Texto de reação como imagem BGRA (para o render compor com transparência).
+    `estilo`: um de ESTILOS_REACAO (textos de impacto dos vídeos de YouTuber) ou um número (cores alternadas)."""
     from PIL import Image, ImageDraw
     texto = texto.strip().upper()[:18]
+    if isinstance(estilo, str) and estilo in ESTILOS_REACAO:
+        img = ESTILOS_REACAO[estilo](texto, largura_tela)
+        rgba = np.array(img)
+        return rgba[:, :, [2, 1, 0, 3]].copy()  # RGBA -> BGRA
+    estilo = estilo if isinstance(estilo, int) else 0
     cor, contorno = CORES_REACAO[estilo % len(CORES_REACAO)]
     alvo = largura_tela * 0.78
     tam = 170
@@ -41,6 +47,80 @@ def figurinha_reacao(texto: str, largura_tela: int, estilo: int = 0) -> np.ndarr
     img = img.rotate(-5 if estilo % 2 == 0 else 4, resample=Image.BICUBIC, expand=True)
     rgba = np.array(img)
     return rgba[:, :, [2, 1, 0, 3]].copy()  # RGBA -> BGRA
+
+
+def _texto_no_tamanho(texto: str, alvo: float, maximo: int = 170):
+    tam = maximo
+    while tam > 50 and _fonte(tam).getbbox(texto)[2] > alvo:
+        tam -= 6
+    return _fonte(tam), tam
+
+
+def _impacto(texto: str, largura_tela: int):
+    """Vermelho com contorno preto grosso e "extrusão" escura embaixo ("TRAPPED", "PRESO!")."""
+    from PIL import Image, ImageDraw
+    fonte, tam = _texto_no_tamanho(texto, largura_tela * 0.8, 180)
+    x0, y0, x1, y1 = fonte.getbbox(texto)
+    borda, prof = max(6, tam // 12), max(4, tam // 18)
+    w, h = x1 - x0 + 4 * borda, y1 - y0 + 4 * borda + prof
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    pos = (2 * borda - x0, 2 * borda - y0)
+    for k in range(prof, 0, -1):  # profundidade: camadas vermelho-escuro empilhadas
+        d.text((pos[0], pos[1] + k), texto, font=fonte, fill=(110, 0, 10), stroke_width=borda, stroke_fill=(0, 0, 0))
+    d.text(pos, texto, font=fonte, fill=(255, 40, 40), stroke_width=borda, stroke_fill=(0, 0, 0))
+    return img.rotate(-4, resample=Image.BICUBIC, expand=True)
+
+
+def _etiqueta(texto: str, largura_tela: int):
+    """Texto branco numa caixa vermelha arredondada ("RUN!!", "CORRE!!")."""
+    from PIL import Image, ImageDraw
+    fonte, tam = _texto_no_tamanho(texto, largura_tela * 0.6, 130)
+    x0, y0, x1, y1 = fonte.getbbox(texto)
+    px, py, borda = tam // 2, tam // 4, max(4, tam // 22)
+    w, h = x1 - x0 + 2 * px, y1 - y0 + 2 * py
+    img = Image.new("RGBA", (w + 12, h + 14), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((8, 12, w + 8, h + 12), radius=tam // 4, fill=(0, 0, 0, 150))  # sombra
+    d.rounded_rectangle((0, 0, w, h), radius=tam // 4, fill=(230, 25, 35), outline=(255, 255, 255), width=borda)
+    d.text((px - x0, py - y0), texto, font=fonte, fill=(255, 255, 255))
+    return img
+
+
+def _dinheiro(texto: str, largura_tela: int):
+    """Verde-limão com contorno preto, como os "+$598K" que saltam no jogo."""
+    from PIL import Image, ImageDraw
+    fonte, tam = _texto_no_tamanho(texto, largura_tela * 0.7, 170)
+    x0, y0, x1, y1 = fonte.getbbox(texto)
+    borda = max(6, tam // 11)
+    w, h = x1 - x0 + 4 * borda, y1 - y0 + 4 * borda
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.text((2 * borda - x0 + 5, 2 * borda - y0 + 7), texto, font=fonte, fill=(0, 0, 0, 170))
+    d.text((2 * borda - x0, 2 * borda - y0), texto, font=fonte, fill=(70, 255, 90), stroke_width=borda,
+           stroke_fill=(0, 0, 0))
+    return img.rotate(5, resample=Image.BICUBIC, expand=True)
+
+
+def _carimbo(texto: str, largura_tela: int):
+    """Selo vermelho inclinado com moldura dupla ("EXPOSED", "BANIDO")."""
+    from PIL import Image, ImageDraw
+    fonte, tam = _texto_no_tamanho(texto, largura_tela * 0.62, 150)
+    x0, y0, x1, y1 = fonte.getbbox(texto)
+    px, py, linha = tam // 3, tam // 5, max(5, tam // 14)
+    w, h = x1 - x0 + 2 * px, y1 - y0 + 2 * py
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    vermelho = (235, 30, 45)
+    d.rounded_rectangle((0, 0, w - 1, h - 1), radius=tam // 6, fill=(255, 255, 255, 235), outline=vermelho,
+                        width=linha)
+    d.rounded_rectangle((linha * 2, linha * 2, w - 1 - linha * 2, h - 1 - linha * 2), radius=tam // 8,
+                        outline=vermelho, width=max(2, linha // 2))
+    d.text((px - x0, py - y0), texto, font=fonte, fill=vermelho)
+    return img.rotate(12, resample=Image.BICUBIC, expand=True)
+
+
+ESTILOS_REACAO = {"impacto": _impacto, "etiqueta": _etiqueta, "dinheiro": _dinheiro, "carimbo": _carimbo}
 
 
 def compor_reacao(quadro: np.ndarray, fig: np.ndarray, t: float, inicio: float, duracao: float = 1.4,

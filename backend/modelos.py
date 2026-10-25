@@ -137,6 +137,15 @@ class Reacao(BaseModel):
     """Texto de reação que pula na tela num instante (s do vídeo original): "ESPERA...", "KKKKK"."""
     t: float = Field(ge=0)
     texto: str = Field(min_length=1, max_length=18)
+    # Visual da figurinha (enfeites.ESTILOS_REACAO): "impacto" (vermelho), "etiqueta" (caixa vermelha),
+    # "dinheiro" (verde), "carimbo" (selo inclinado) ou None (cores alternadas de sempre)
+    estilo: str | None = None
+
+    @field_validator("estilo", mode="before")
+    @classmethod
+    def _estilo(cls, v):
+        v = str(v or "").strip().lower()
+        return v if v in ("impacto", "etiqueta", "dinheiro", "carimbo") else None
 
 
 class Emoji(BaseModel):
@@ -386,7 +395,7 @@ class Template(BaseModel):
     cor: str | None = None
     animada: bool = False
     formato: Literal["9:16", "16:9", "1:1"] = "9:16"
-    layout: Literal["auto", "rosto", "dupla", "centro", "inteiro", "split", "jogo"] = "auto"
+    layout: Literal["auto", "rosto", "dupla", "centro", "inteiro", "split", "jogo", "pip"] = "auto"
     duracao: tuple[float, float] = (30, 60)
     titulo: bool = True
     barra: bool | None = None

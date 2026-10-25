@@ -1,7 +1,8 @@
 // Preview ao vivo de um preset de legenda (imita o que o ASS/Remotion renderizam).
 import { useEffect, useMemo, useState } from "react";
 
-const FRASE = "ninguém te conta isso mas o segredo é consistência todo santo dia".split(" ");
+const FRASE = "ninguém te conta isso, mas o segredo é consistência todo santo dia.".split(" ");
+const ENFASE = new Set(["segredo", "consistência"]); // palavras-chave da frase de exemplo
 const fontesCarregadas = new Set();
 
 // Registra a fonte do preset no navegador (vem de /api/fontes/<arquivo>)
@@ -75,7 +76,10 @@ export default function PreviewLegenda({ estilo, fundo, titulo = "Ninguém te co
         {grupo.palavras.map((p, k) => {
           const ativa = grupo.inicio + k === indice;
           const falada = grupo.inicio + k <= indice;
-          const texto = estilo.maiusculas ? p.toUpperCase() : p;
+          const limpa = estilo.pontuacao ? p : p.replace(/[.,;:…]+$/, "");
+          const texto = estilo.maiusculas ? limpa.toUpperCase() : limpa;
+          const colorida = estilo.destaque === "enfase" ? ENFASE.has(p.replace(/[.,]/g, "")) : ativa;
+          const sombra = estilo.sombra * escala;
           return (
             <span
               key={`${grupo.inicio}-${k}`}
@@ -84,12 +88,13 @@ export default function PreviewLegenda({ estilo, fundo, titulo = "Ninguém te co
                 fontFamily: `"${estilo.fonte}"`,
                 fontSize: estilo.tamanho * escala,
                 lineHeight: 1.12,
-                color: ativa ? estilo.cor_destaque : estilo.cor_texto,
+                color: colorida ? estilo.cor_destaque : estilo.cor_texto,
                 WebkitTextStroke: `${estilo.contorno * escala * 2}px ${estilo.cor_contorno}`,
                 paintOrder: "stroke fill",
-                textShadow: `0 ${estilo.sombra * escala}px ${estilo.sombra * 2 * escala}px rgba(0,0,0,.55)`,
+                textShadow: estilo.sombra_dura ? `${sombra}px ${sombra}px 0 ${estilo.cor_contorno}` : `0 ${sombra}px ${sombra * 2}px rgba(0,0,0,.55)`,
                 opacity: estilo.animacao === "fade" && !falada ? 0.55 : 1,
-                animation: ativa && estilo.animacao === "pop" ? `pop-legenda ${estilo.duracao_pop_ms || 120}ms ease-out` : undefined,
+                animation: ativa && estilo.animacao === "pop" ? `pop-legenda ${estilo.duracao_pop_ms || 120}ms ease-out`
+                  : estilo.animacao === "elastico" ? `elastico-legenda ${estilo.duracao_pop_ms || 130}ms ease-out` : undefined,
                 "--escala-pop": estilo.escala_pop || 1.15,
               }}
             >
@@ -98,7 +103,8 @@ export default function PreviewLegenda({ estilo, fundo, titulo = "Ninguém te co
           );
         })}
       </div>
-      <style>{`@keyframes pop-legenda { 0%{transform:scale(1)} 50%{transform:scale(var(--escala-pop))} 100%{transform:scale(1)} }`}</style>
+      <style>{`@keyframes pop-legenda { 0%{transform:scale(1)} 50%{transform:scale(var(--escala-pop))} 100%{transform:scale(1)} }
+@keyframes elastico-legenda { 0%{transform:scale(.4);filter:blur(2px)} 45%{transform:scale(var(--escala-pop));filter:blur(0)} 100%{transform:scale(1)} }`}</style>
     </div>
   );
 }

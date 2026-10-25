@@ -140,7 +140,7 @@ export default function Home() {
             num_clips: numClips, duracao: DURACOES[duracao], formato, preset, estilo_legenda: animada ? "animada" : "simples",
             layout, zoom, remover_silencios: silencios, titulo, abertura, limpar_voz: limparVoz,
             musica, efeitos_sonoros: efeitos, video_apoio: apoio || null, ver_imagens: verImagens,
-            diretor: comIa && diretor, broll: comIa && broll, reacoes: comIa && reacoes,
+            diretor: comIa && diretor, broll: comIa && broll, reacoes,
             idioma_legenda: comIa ? idiomaLegenda : "", replay, loop, sem_ia: !comIa,
           },
         }, setEnviando);
@@ -365,6 +365,7 @@ export default function Home() {
                     <option value="inteiro">Vídeo inteiro + fundo desfocado</option>
                     <option value="jogo">Gameplay em destaque</option>
                     <option value="split">Gameplay em cima + facecam embaixo</option>
+                    <option value="pip">Gameplay + facecam no canto (borda colorida)</option>
                   </select>
                 </div>
               </>
@@ -400,7 +401,7 @@ export default function Home() {
             {tipo === "curto" && (
               <>
                 <Alternador ativo={titulo} aoMudar={setTitulo} rotulo="Título gancho" descricao="Nos primeiros segundos do clipe" />
-                {comIa && <Alternador ativo={reacoes} aoMudar={setReacoes} rotulo="Textos de reação" descricao="“ESPERA...”, “KKKK” no susto e na virada" />}
+                <Alternador ativo={reacoes} aoMudar={setReacoes} rotulo="Textos de impacto" descricao={comIa ? "“ESPERA...”, “CORRE!!”, “EXPOSED” no susto e na virada" : "“CORRE!!”, “PRESO!”, “EXPOSED” pelas palavras-chave da fala"} />
                 <Alternador ativo={silencios} aoMudar={setSilencios} rotulo="Cortar silêncios" descricao="Pausas longas e “hum”, “é”, “tipo”" />
                 <Alternador ativo={loop} aoMudar={setLoop} rotulo="Final em loop" descricao="Termina sem fade, emendando no começo quando o vídeo repete" />
                 {modo === "gameplay" && (

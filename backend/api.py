@@ -32,6 +32,7 @@ import custos
 import editor_ffmpeg as ef
 import legendas
 import longo
+import memes
 import pipeline
 import planejador_llm as llm
 import projetos
@@ -43,6 +44,7 @@ from modelos import Template
 log = logging.getLogger("api")
 config.preparar_pastas()
 biblioteca.preparar()
+memes.preparar()
 
 app = FastAPI(title="Gadosso Edit")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -760,7 +762,7 @@ class EdicaoClip(BaseModel):
 
 CHAVES_CONFIG = {"look", "transicao", "zoom_forca", "impacto", "broll", "reacoes", "idioma_legenda", "replay", "loop","formato", "legenda_ativa", "estilo", "preset", "cor", "titulo_ativo", "zoom",
                  "remover_silencios", "normalizar", "layout", "deslocamento_x", "musica", "efeitos", "abertura",
-                 "limpar_voz"}
+                 "limpar_voz", "deriva", "cor_borda", "memes"}
 
 
 @app.patch("/api/projetos/{pid}/clips/{cid}")
@@ -938,6 +940,22 @@ def excluir_audio(caminho: str):
 def abrir_pasta_audio():
     biblioteca.preparar()
     subprocess.Popen(["explorer", str(biblioteca.PASTA_AUDIO)], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    return {"ok": True}
+
+
+@app.get("/api/memes")
+def pasta_de_memes():
+    """Memes e figurinhas da pasta do usuário (o nome do arquivo diz quando usar)."""
+    memes.preparar()
+    itens = memes.listar()
+    return {"pasta": str(memes.PASTA), "total": len(itens),
+            "itens": [{"nome": Path(m["arquivo"]).name, "tipo": m["tipo"], "palavras": m["palavras"]} for m in itens]}
+
+
+@app.post("/api/memes/abrir-pasta")
+def abrir_pasta_memes():
+    memes.preparar()
+    subprocess.Popen(["explorer", str(memes.PASTA)], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return {"ok": True}
 
 

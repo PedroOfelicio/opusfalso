@@ -30,7 +30,7 @@ def main():
     ap.add_argument("--formato", choices=["9:16", "16:9", "1:1"], default="9:16")
     ap.add_argument("--preset", default="opus", help="preset de legenda (estilos.json)")
     ap.add_argument("--animada", action="store_true", help="legenda animada (Remotion)")
-    ap.add_argument("--layout", default="auto", choices=["auto", "rosto", "centro", "inteiro", "split", "dupla"])
+    ap.add_argument("--layout", default="auto", choices=["auto", "rosto", "centro", "inteiro", "split", "dupla", "jogo", "pip"])
     ap.add_argument("--musica", help="arquivo de música de fundo")
     ap.add_argument("--apoio", help="vídeo de apoio para a parte de baixo (gameplay)")
     ap.add_argument("--sem-imagens", action="store_true", help="gameplay: não enviar quadros ao Claude (só áudio e fala)")

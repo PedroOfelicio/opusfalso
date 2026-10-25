@@ -39,6 +39,8 @@ export const api = {
   fontes: () => req("/api/fontes"),
   audio: () => req("/api/audio"),
   abrirPastaAudio: () => req("/api/audio/abrir-pasta", { method: "POST" }),
+  memes: () => req("/api/memes"),
+  abrirPastaMemes: () => req("/api/memes/abrir-pasta", { method: "POST" }),
   baixarPacoteMusicas: () => req("/api/audio/pacote", { method: "POST" }),
   excluirAudio: (caminho) => req(`/api/audio/arquivo?caminho=${encodeURIComponent(caminho)}`, { method: "DELETE" }),
   urlAudio: (caminho) => `/api/audio/arquivo?caminho=${encodeURIComponent(caminho)}`,

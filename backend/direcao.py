@@ -29,6 +29,8 @@ TRANSICOES = {
     "desfoque": ("desfoca e foca de novo (história, passagem de tempo)", 0.25),
     "tremor": ("a tela treme (impacto, susto, raiva)", 0.3),
     "glitch": ("falha digital colorida (tecnologia, caos, humor)", 0.15),
+    "risco": ("risco branco cruzando a tela na diagonal (troca de assunto, estilo YouTuber de jogo)", 0.28),
+    "blur_zoom": ("aproxima borrando e volta (virada rápida, meme, energia)", 0.3),
 }
 
 ZOOMS = {"suave": 0.07, "medio": 0.12, "forte": 0.2}
@@ -38,10 +40,10 @@ IMPACTOS = {"nenhum": 0.0, "tremor": 0.35, "flash": 0.15, "glitch": 0.2}
 
 # Padrão por clima (sem o Claude, ou campo que ele não escolheu)
 PADRAO_CLIMA = {
-    "energetica": {"preset": "gamer", "look": "vibrante", "transicao": "zoom_rapido", "zoom": "forte", "impacto": "tremor"},
+    "energetica": {"preset": "gamer", "look": "vibrante", "transicao": "risco", "zoom": "forte", "impacto": "tremor"},
     "tensa": {"preset": "cinema", "look": "dramatico", "transicao": "tremor", "zoom": "medio", "impacto": "flash"},
     "calma": {"preset": "minimalista", "look": "quente", "transicao": "pulso", "zoom": "suave", "impacto": "nenhum"},
-    "engracada": {"preset": "neon", "look": "vibrante", "transicao": "glitch", "zoom": "forte", "impacto": "glitch"},
+    "engracada": {"preset": "roblox", "look": "vibrante", "transicao": "blur_zoom", "zoom": "forte", "impacto": "glitch"},
     "epica": {"preset": "cinema", "look": "cinema", "transicao": "flash", "zoom": "medio", "impacto": "flash"},
 }
 PADRAO = {"preset": None, "look": "natural", "transicao": "pulso", "zoom": "medio", "impacto": "nenhum"}
