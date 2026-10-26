@@ -8,6 +8,7 @@ import Projeto from "./pages/Projeto";
 import Editor from "./pages/Editor";
 import Configuracoes from "./pages/Configuracoes";
 import ProjetoLongo from "./pages/ProjetoLongo";
+import Postar from "./pages/Postar";
 import PrimeiroUso from "./components/PrimeiroUso";
 import { Compass } from "lucide-react";
 
@@ -26,6 +27,7 @@ export default function App() {
             <Route path="/projetos" element={<Projetos />} />
             <Route path="/projetos/:id" element={<Projeto />} />
             <Route path="/projetos/:id/clips/:cid" element={<Editor />} />
+            <Route path="/postar" element={<Postar />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
             <Route path="*" element={<EstadoVazio icone={Compass} titulo="Página não encontrada" />} />
           </Routes>

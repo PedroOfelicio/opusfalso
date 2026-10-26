@@ -33,6 +33,7 @@ import editor_ffmpeg as ef
 import legendas
 import longo
 import memes
+import postagem
 import pipeline
 import planejador_llm as llm
 import projetos
@@ -957,6 +958,72 @@ def abrir_pasta_memes():
     memes.preparar()
     subprocess.Popen(["explorer", str(memes.PASTA)], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return {"ok": True}
+
+
+# ================================================================ postagem nos canais (sem a API do YouTube)
+
+class CanalEntrada(BaseModel):
+    nome: str | None = None
+    url: str | None = None
+    por_dia: int | None = Field(None, ge=1, le=50)
+    ativo: bool | None = None
+
+
+@app.get("/api/postagem")
+def estado_postagem():
+    return postagem.estado()
+
+
+@app.post("/api/postagem/canais")
+def criar_canal(dados: CanalEntrada):
+    if not (dados.nome or "").strip():
+        raise HTTPException(400, "Dê um nome ao canal")
+    postagem.salvar_canal(dados.model_dump(exclude_none=True))
+    return postagem.estado()
+
+
+@app.put("/api/postagem/canais/{canal}")
+def editar_canal(canal: str, dados: CanalEntrada):
+    try:
+        postagem.salvar_canal(dados.model_dump(exclude_none=True), canal)
+    except KeyError:
+        raise HTTPException(404, "Canal não encontrado")
+    return postagem.estado()
+
+
+@app.delete("/api/postagem/canais/{canal}")
+def excluir_canal(canal: str):
+    postagem.excluir_canal(canal)
+    return postagem.estado()
+
+
+@app.post("/api/postagem/fila")
+def montar_fila():
+    return postagem.montar_fila()
+
+
+@app.post("/api/postagem/pular")
+def pular_clipe(dados: dict):
+    return postagem.pular(str(dados.get("chave", "")))
+
+
+@app.post("/api/postagem/canais/{canal}/abrir-pasta")
+def abrir_pasta_canal(canal: str):
+    """Monta a pasta do canal (vídeos com nome = título) e abre no Explorer, com os vídeos prontos para arrastar."""
+    try:
+        pasta = postagem.preparar_pasta(canal)
+    except KeyError as e:
+        raise HTTPException(404, str(e).strip("'\""))
+    subprocess.Popen(["explorer", str(pasta)], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    return {"ok": True, "pasta": str(pasta)}
+
+
+@app.post("/api/postagem/canais/{canal}/postado")
+def marcar_postado(canal: str, dados: dict):
+    try:
+        return postagem.marcar_postado(canal, bool(dados.get("postado", True)))
+    except KeyError as e:
+        raise HTTPException(404, str(e).strip("'\""))
 
 
 # ================================================================ interface compilada (opcional)

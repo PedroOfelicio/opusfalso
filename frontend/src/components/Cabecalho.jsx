@@ -7,6 +7,7 @@ import { api } from "../api";
 const ABAS = [
   { para: "/", rotulo: "Início", fim: true },
   { para: "/projetos", rotulo: "Projetos" },
+  { para: "/postar", rotulo: "Postar" },
   { para: "/configuracoes", rotulo: "Configurações" },
 ];
 
