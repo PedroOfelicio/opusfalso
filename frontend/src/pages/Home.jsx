@@ -41,6 +41,7 @@ export default function Home() {
   const [temChave, setTemChave] = useState(true);
   // clipes curtos
   const [numClips, setNumClips] = useState(5);
+  const [volume, setVolume] = useState(false); // o vídeo inteiro em clipes curtos diferentes
   const [duracao, setDuracao] = useState("30-60s");
   const [preset, setPreset] = useState("gamer");
   const [animada, setAnimada] = useState(true);
@@ -116,7 +117,17 @@ export default function Home() {
     setCaminho("");
   };
 
+  const ligarVolume = () => {
+    setVolume(true);
+    setDuracao("15-30s");
+    if (animada) {
+      setAnimada(false);
+      avisar("No modo volume a legenda é a simples (renderiza ~4x mais rápido; o pop elástico continua).");
+    }
+  };
+
   const mudarNumClips = (n) => {
+    setVolume(false);
     const novo = Math.max(1, Math.min(100, n));
     if (novo > 20 && numClips <= 20 && animada) {
       setAnimada(false);
@@ -137,7 +148,7 @@ export default function Home() {
         const p = await criarProjeto({
           ...base,
           opcoes: {
-            num_clips: numClips, duracao: DURACOES[duracao], formato, preset, estilo_legenda: animada ? "animada" : "simples",
+            num_clips: volume ? 100 : numClips, volume, duracao: DURACOES[duracao], formato, preset, estilo_legenda: animada ? "animada" : "simples",
             layout, zoom, remover_silencios: silencios, titulo, abertura, limpar_voz: limparVoz,
             musica, efeitos_sonoros: efeitos, video_apoio: apoio || null, ver_imagens: verImagens,
             diretor: comIa && diretor, broll: comIa && broll, reacoes,
@@ -160,7 +171,7 @@ export default function Home() {
       avisar(e.message, "erro");
       setEnviando(null);
     }
-  }, [pronto, enviando, arquivo, caminho, instrucao, modo, tipo, numClips, duracao, formato, preset, animada, layout, zoom, silencios, titulo, abertura, limparVoz, musica, efeitos, apoio, verImagens, diretor, broll, reacoes, idiomaLegenda, replay, loop, modoLongo, alvo, legendaLonga, cortarParado, removerErros, ritmo, comIa, navegar, avisar]);
+  }, [pronto, enviando, arquivo, caminho, instrucao, modo, tipo, numClips, volume, duracao, formato, preset, animada, layout, zoom, silencios, titulo, abertura, limparVoz, musica, efeitos, apoio, verImagens, diretor, broll, reacoes, idiomaLegenda, replay, loop, modoLongo, alvo, legendaLonga, cortarParado, removerErros, ritmo, comIa, navegar, avisar]);
 
   // Ctrl+Enter = começar
   useEffect(() => {
@@ -274,13 +285,17 @@ export default function Home() {
                 <div className="flex items-center gap-2">
                   <div className="inline-flex items-center rounded-full border border-black/10 bg-white">
                     <button className="px-3 py-1.5 text-suave hover:text-texto cursor-pointer" onClick={() => mudarNumClips(numClips > 10 ? numClips - 5 : numClips - 1)}>−</button>
-                    <span className="w-8 text-center font-medium tabular-nums">{numClips}</span>
+                    <span className="w-8 text-center font-medium tabular-nums">{volume ? "–" : numClips}</span>
                     <button className="px-3 py-1.5 text-suave hover:text-texto cursor-pointer" onClick={() => mudarNumClips(numClips >= 10 ? numClips + 5 : numClips + 1)}>+</button>
                   </div>
                   {[10, 30, 70].map((n) => (
-                    <Chip key={n} ativo={numClips === n} onClick={() => mudarNumClips(n)}>{n}</Chip>
+                    <Chip key={n} ativo={!volume && numClips === n} onClick={() => mudarNumClips(n)}>{n}</Chip>
                   ))}
+                  <Chip ativo={volume} onClick={ligarVolume} title="O vídeo inteiro vira clipes curtos, todos diferentes, com nota">Vídeo inteiro</Chip>
                 </div>
+                {volume && (
+                  <p className="text-xs text-apagado mt-2">~2 a 3 clipes por minuto de vídeo, sem trecho repetido; tela parada e tempo morto ficam de fora. A escolha não usa IA.</p>
+                )}
               </div>
               <div>
                 <div className="rotulo mb-2">Duração</div>
@@ -487,7 +502,7 @@ export default function Home() {
         <Botao variante="primario" tamanho="lg" icone={Sparkles} onClick={enviar} disabled={!pronto} carregando={enviando !== null} className="w-full sm:w-auto sm:min-w-72">
           {enviando !== null
             ? enviando < 1 ? `Enviando ${Math.round(enviando * 100)}%` : "Criando projeto…"
-            : (tipo === "curto" ? `Gerar ${numClips} clipe${numClips > 1 ? "s" : ""}` : "Editar o vídeo") + (comIa ? "" : " · grátis")}
+            : (tipo === "curto" ? (volume ? "Cortar o vídeo inteiro" : `Gerar ${numClips} clipe${numClips > 1 ? "s" : ""}`) : "Editar o vídeo") + (comIa ? "" : " · grátis")}
         </Botao>
         <span className="rotulo-mono text-black/35">Ctrl + Enter</span>
       </div>

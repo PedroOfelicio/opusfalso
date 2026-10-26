@@ -35,6 +35,7 @@ import planejador_local as local
 import projetos
 import reenquadramento as rq
 import transcricao as tr
+import volume
 import youtube
 from config import Cancelado
 from modelos import CLIMAS, Corte, PlanoEdicao, Reacao
@@ -1255,7 +1256,8 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
     plano = _plano(meta, pid)
     prog(0.4, "Plano de edição pronto")
     analise = None
-    if meta["modo"] == "gameplay":
+    em_volume = bool(meta["opcoes"].get("volume"))
+    if meta["modo"] == "gameplay" or em_volume:
         analise = analise_audio.analisar(video, lambda p, d="": prog(0.4 + 0.6 * p, d), cancelado)
     projetos.atualizar(pid, lambda m: m.update(plano=plano.model_dump(), nao_atendido=list(plano.nao_atendido)))
     if plano.nao_atendido:
@@ -1263,7 +1265,10 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
 
     # 3. Escolha dos trechos
     prog.etapa("escolhendo")
-    if meta["modo"] == "gameplay":
+    if em_volume:  # o vídeo inteiro em clipes curtos diferentes, sem IA na escolha
+        cortes = volume.cortes(video, transcricao, analise, plano.duracao_min, plano.duracao_max, cancelado,
+                               lambda p, d="": prog(p, d))
+    elif meta["modo"] == "gameplay":
         cortes = _cortes_gameplay(video, transcricao, analise, plano, pid,
                                   ver_imagens=_ver_imagens(meta["opcoes"]), cancelado=cancelado,
                                   progresso=prog)
@@ -1272,7 +1277,7 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
     if not cortes:
         llm.esquecer_respostas(pid)  # tentar de novo deve perguntar de novo, não repetir a mesma resposta
         raise ValueError("Nenhum trecho adequado foi encontrado.")
-    if len(cortes) < plano.num_clips:
+    if len(cortes) < plano.num_clips and not em_volume:
         _aviso(pid, f"Só encontrei conteúdo bom para {len(cortes)} de {plano.num_clips} clipe(s) de "
                     f"{plano.duracao_min:.0f}-{plano.duracao_max:.0f} s sem repetir trechos. Para mais clipes, "
                     "use um vídeo mais longo ou uma duração menor.")
