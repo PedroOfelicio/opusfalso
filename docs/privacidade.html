@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Política de privacidade · Gadosso Edit</title>
+  <meta name="description" content="Como o Gadosso Edit usa os dados da conta do Google: somente leitura, armazenados apenas no computador do usuário.">
+  <link rel="icon" href="icone.png">
+  <style>
+    :root { --fundo: #f4f4f6; --cartao: #ffffff; --texto: #0a0a0a; --suave: #5e5e63; --borda: #e6e6ea; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fundo: #111113; --cartao: #1a1a1d; --texto: #f2f2f4; --suave: #a3a3aa; --borda: #2b2b30; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--fundo); color: var(--texto); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 680px; margin: 0 auto; padding: 56px 16px; }
+    article { background: var(--cartao); border: 1px solid var(--borda); border-radius: 16px; padding: 28px; margin-top: 24px; }
+    h1 { font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+    h2 { font-size: 1.05rem; margin: 28px 0 6px; }
+    h2:first-child { margin-top: 0; }
+    p, li { color: var(--suave); }
+    ul { padding-left: 20px; }
+    code { font-size: 0.9em; overflow-wrap: anywhere; }
+    a { color: inherit; }
+    footer { margin-top: 32px; font-size: 14px; color: var(--suave); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Política de privacidade</h1>
+    <p>Gadosso Edit · atualizada em 1º de novembro de 2026</p>
+
+    <article>
+      <h2>O que é o app</h2>
+      <p>O Gadosso Edit é um editor de vídeo de uso pessoal que roda no computador do próprio usuário. Não existe servidor on-line do app: nenhum dado é enviado para o autor nem para terceiros.</p>
+
+      <h2>Dados do Google que o app acessa</h2>
+      <p>Ao entrar com o Google, o app pede somente estas permissões de leitura:</p>
+      <ul>
+        <li><code>youtube.readonly</code>: nome do canal, número de inscritos, lista de vídeos e as estatísticas públicas de cada um (views, likes, comentários).</li>
+        <li><code>yt-analytics.readonly</code>: relatórios do YouTube Analytics do canal (views por dia, tempo assistido, retenção, inscritos ganhos).</li>
+      </ul>
+      <p>O app não publica, não altera e não apaga nada no YouTube nem na conta do Google, e não acessa e-mail, contatos ou outros serviços.</p>
+
+      <h2>Como os dados são usados</h2>
+      <p>Só para mostrar ao próprio usuário um painel com as métricas do canal dele e ligar cada vídeo publicado ao corte que o app gerou. Os dados não são vendidos, compartilhados nem usados para publicidade.</p>
+
+      <h2>Onde os dados ficam</h2>
+      <p>O token de acesso e as métricas ficam em arquivos na pasta de dados do app, no computador do usuário. As únicas conexões feitas são diretamente com as APIs do Google.</p>
+
+      <h2>Como remover o acesso</h2>
+      <ul>
+        <li>No app: aba Métricas, botão “sair”, que apaga o token do computador.</li>
+        <li>Na conta do Google: <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>, remover o acesso do Gadosso Edit.</li>
+        <li>Apagar a pasta de dados do app remove também as métricas guardadas.</li>
+      </ul>
+
+      <h2>Uso limitado</h2>
+      <p>O uso de informações recebidas das APIs do Google segue a <a href="https://developers.google.com/terms/api-services-user-data-policy">Política de dados do usuário dos serviços de API do Google</a>, incluindo os requisitos de uso limitado. O app também segue os <a href="https://www.youtube.com/t/terms">Termos de Serviço do YouTube</a> e a <a href="https://policies.google.com/privacy">Política de Privacidade do Google</a>.</p>
+
+      <h2>Contato</h2>
+      <p>Pelo repositório do projeto: <a href="https://github.com/PedroOfelicio/opusfalso/issues">github.com/PedroOfelicio/opusfalso</a>.</p>
+    </article>
+
+    <footer><a href="./">Início</a></footer>
+  </main>
+</body>
+</html>

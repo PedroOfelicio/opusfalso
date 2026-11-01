@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gadosso Edit</title>
+  <meta name="description" content="Editor de vídeo pessoal que roda no computador do autor: cortes de gameplay, legendas e métricas do próprio canal.">
+  <link rel="icon" href="icone.png">
+  <style>
+    :root { --fundo: #f4f4f6; --cartao: #ffffff; --texto: #0a0a0a; --suave: #5e5e63; --borda: #e6e6ea; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fundo: #111113; --cartao: #1a1a1d; --texto: #f2f2f4; --suave: #a3a3aa; --borda: #2b2b30; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--fundo); color: var(--texto); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 680px; margin: 0 auto; padding: 56px 16px; }
+    .cartao { background: var(--cartao); border: 1px solid var(--borda); border-radius: 16px; padding: 28px; margin-top: 24px; }
+    h1 { font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+    h2 { font-size: 1.05rem; margin: 0 0 8px; }
+    p, li { color: var(--suave); }
+    ul { padding-left: 20px; margin: 0; }
+    a { color: inherit; }
+    footer { margin-top: 32px; font-size: 14px; color: var(--suave); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Gadosso Edit</h1>
+    <p>Editor de vídeo de uso pessoal, que roda no computador do próprio autor. Não é um serviço on-line e não tem contas de usuários.</p>
+
+    <div class="cartao">
+      <h2>O que ele faz</h2>
+      <ul>
+        <li>Corta gravações de gameplay em vídeos curtos verticais, com a webcam em cima e o jogo embaixo, legenda, efeitos sonoros e transições.</li>
+        <li>Edita vídeos longos para o YouTube, com capítulos e thumbnails.</li>
+        <li>Prepara título, descrição e thumbnail de cada vídeo para o autor postar no próprio canal.</li>
+        <li>Mostra as métricas do canal do autor (views, inscritos, retenção), lidas da API do YouTube com permissão somente de leitura.</li>
+      </ul>
+    </div>
+
+    <div class="cartao">
+      <h2>Acesso à conta do Google</h2>
+      <p>O app pede apenas leitura do YouTube e do YouTube Analytics, e só do canal de quem fez o login. Nada é publicado, alterado ou apagado na conta. Os dados ficam no computador onde o app roda. Detalhes na <a href="privacidade.html">política de privacidade</a>.</p>
+    </div>
+
+    <footer>
+      <a href="privacidade.html">Política de privacidade</a> · <a href="https://github.com/PedroOfelicio/opusfalso">Código no GitHub</a>
+    </footer>
+  </main>
+</body>
+</html>
