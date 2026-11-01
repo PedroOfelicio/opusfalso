@@ -20,6 +20,7 @@ export type Estilo = {
   contorno: number;
   sombra: number;
   posicao_y: number;
+  titulo_y?: number; // topo do título gancho (fração da altura); padrão 0,13
   animacao: "pop" | "fade" | "elastico" | string;
   escala_pop: number;
   duracao_pop_ms: number;

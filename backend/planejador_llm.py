@@ -9,6 +9,10 @@ Funções:
 - escolher_cortes_falado(): transcrição -> lista de Cortes
 - escolher_cortes_gameplay(): candidatos (picos de áudio) -> escolhas
 - interpretar_ajuste(): "deixa mais curto" -> AjusteClips
+- textos_clipes(): textos de publicação de clipes já cortados (modo volume)
+
+Os textos de publicação (título, descrição, hashtags, texto da thumbnail e textos na tela) saem no idioma do canal
+(Configurações > idioma_post), mesmo que a fala seja em outro.
 """
 import base64
 import hashlib
@@ -25,7 +29,7 @@ import config
 import custos
 import direcao
 from modelos import (CLIMAS, AjusteClips, Correcoes, Corte, EdicaoLonga, PlanoEdicao, TitulosCapitulos,
-                     RespostaCortes, RespostaGameplay, RevisaoClipe)
+                     RespostaCortes, RespostaGameplay, RespostaTextos, RevisaoClipe)
 
 log = logging.getLogger("claude")
 
@@ -317,6 +321,26 @@ Critérios:
 - Ordene do melhor para o pior."""
 
 
+IDIOMAS_POST = {"en": "inglês", "pt": "português do Brasil", "es": "espanhol", "fr": "francês", "it": "italiano",
+                "de": "alemão"}
+
+
+def idioma_post() -> str:
+    """Idioma dos textos de publicação ("en", "pt"...; vazio = o da fala)."""
+    return (config.carregar().get("idioma_post") or "").strip()
+
+
+def _regra_idioma(campos: str) -> str:
+    """Regra que vai no fim do prompt quando o canal publica num idioma fixo."""
+    idioma = idioma_post()
+    if not idioma:
+        return ""
+    nome = IDIOMAS_POST.get(idioma, idioma)
+    return (f"\n\nIDIOMA DO CANAL: {nome}. Escreva {campos} em {nome}, natural como um nativo escreveria, mesmo que "
+            "a fala do vídeo seja em outro idioma. O que é copiado da fala (palavras_enfase, correcoes) continua "
+            "exatamente como está na transcrição.")
+
+
 def _com_direcao(sistema: str) -> str:
     """Acrescenta o catálogo da direção de arte (os presets vêm do estilos.json, que o usuário pode editar)."""
     return sistema + "\n" + direcao.texto_catalogo(list(presets_disponiveis()))
@@ -338,7 +362,8 @@ def escolher_cortes_falado(transcricao: dict, plano: PlanoEdicao, projeto_id=Non
         pedido += ("NÃO use estes intervalos (já viraram clipes): "
                    + ", ".join(f"{a:.0f}-{b:.0f}s" for a, b in excluir) + "\n")
     conteudo = pedido + "\nTRANSCRIÇÃO:\n" + _formatar_transcricao(transcricao)
-    resposta = _chamar_json(_com_direcao(SISTEMA_CORTES), conteudo, RespostaCortes, projeto_id, "escolha de cortes")
+    sistema = _com_direcao(SISTEMA_CORTES) + _regra_idioma("titulo, legenda_post, hashtags e o texto das reacoes")
+    resposta = _chamar_json(sistema, conteudo, RespostaCortes, projeto_id, "escolha de cortes")
 
     cortes = []
     for c in resposta.cortes:
@@ -457,7 +482,8 @@ def escolher_cortes_gameplay(candidatos: list[dict], quantidade: int, projeto_id
         if c.get("folha"):
             conteudo.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                                          "data": base64.standard_b64encode(c["folha"]).decode()}})
-    return _chamar_json(_com_direcao(SISTEMA_GAMEPLAY), conteudo, RespostaGameplay, projeto_id, "escolha gameplay",
+    sistema = _com_direcao(SISTEMA_GAMEPLAY) + _regra_idioma("titulo, legenda_post, hashtags e o texto das reacoes")
+    return _chamar_json(sistema, conteudo, RespostaGameplay, projeto_id, "escolha gameplay",
                         max_tokens=5000)
 
 
@@ -568,13 +594,15 @@ def decidir_longo(transcricao: dict, modo: str, instrucao: str = "", alvo_min: f
     if instrucao.strip():
         pedido += f"PEDIDO DO USUÁRIO: {instrucao.strip()}\n"
     conteudo = pedido + "\nTRANSCRIÇÃO:\n" + _formatar_transcricao(transcricao)
-    return _chamar_json(SISTEMA_LONGO, conteudo, EdicaoLonga, projeto_id, "edição de vídeo longo", max_tokens=16000)
+    sistema = SISTEMA_LONGO + _regra_idioma("titulos, descricao, tags, texto_thumb e os títulos de capitulos e momentos")
+    return _chamar_json(sistema, conteudo, EdicaoLonga, projeto_id, "edição de vídeo longo", max_tokens=16000)
 
 
 SISTEMA_TITULOS_GAMEPLAY = """Você dá nome aos capítulos de um vídeo longo de gameplay para o YouTube e escreve os metadados.
 Recebe a lista de capítulos (partidas ou lances) com o que o jogador falou em cada um.
 Responda APENAS com JSON válido, sem markdown:
-{"capitulos": ["título do capítulo 1", "..."], "titulos": ["...", "...", "..."], "descricao": "...", "tags": ["..."]}
+{"capitulos": ["título do capítulo 1", "..."], "titulos": ["...", "...", "..."], "descricao": "...", "tags": ["..."],
+ "texto_thumb": "..."}
 - capitulos: exatamente um título curto por capítulo, na mesma ordem (máx. 6 palavras, estilo gamer, sem numeração).
   Sem fala no trecho: use o contexto (ex.: "Clutch no fim do round").
 - titulos: 3 opções de título para o YouTube (máx. 70 caracteres).
@@ -590,8 +618,8 @@ def titulos_gameplay_longo(capitulos: list[dict], jogo_hint: str = "", projeto_i
         dica = f" | sugestão: {c['titulo_sugerido']}" if c.get("titulo_sugerido") else ""
         linhas.append(f"{k}. {c['inicio'] / 60:.1f}-{c['fim'] / 60:.1f} min{dica} | fala: {(c.get('fala') or '(sem fala)')[:300]}")
     conteudo = (f"{jogo_hint}\nCAPÍTULOS ({len(capitulos)}):\n" + "\n".join(linhas)).strip()
-    return _chamar_json(SISTEMA_TITULOS_GAMEPLAY, conteudo, TitulosCapitulos, projeto_id, "títulos do vídeo longo",
-                        max_tokens=3000)
+    sistema = SISTEMA_TITULOS_GAMEPLAY + _regra_idioma("capitulos, titulos, descricao, tags e texto_thumb")
+    return _chamar_json(sistema, conteudo, TitulosCapitulos, projeto_id, "títulos do vídeo longo", max_tokens=3000)
 
 
 SISTEMA_CORRECOES = """Você revisa a transcrição automática da narração de um vídeo de gameplay (o som do jogo atrapalha o
@@ -607,3 +635,31 @@ def corrigir_transcricao(transcricao: dict, projeto_id=None) -> Correcoes:
     texto = "\n".join(s["texto"].strip() for s in transcricao["segmentos"] if s["texto"].strip())
     return _chamar_json(SISTEMA_CORRECOES, "TRANSCRIÇÃO:\n" + texto, Correcoes, projeto_id,
                         "correções da transcrição", max_tokens=4000)
+
+
+# ================================================================ 7. textos de clipes já cortados (modo volume)
+
+SISTEMA_TEXTOS = """Você escreve os textos de publicação de clipes curtos (YouTube Shorts) cortados de um vídeo.
+Recebe o nome do vídeo e, para cada clipe, o que foi falado nele (com o segundo do vídeo em que cada frase começa).
+Responda APENAS com JSON válido, sem markdown:
+{"clipes": [{"id": 3, "titulo": "...", "legenda_post": "...", "hashtags": ["#..."], "reacoes": [{"t": 118.4, "texto": "..."}]}]}
+- Um item para CADA clipe recebido, com o mesmo id.
+- titulo: gancho curto (máx. 7 palavras) que promete o que o clipe entrega, sem entregar o final. Sem aspas, sem emoji.
+  Sem fala no clipe: use o nome do vídeo e o tipo de momento.
+- legenda_post: 1 frase curta (máx. 120 caracteres) que complementa o título e termina com uma pergunta ou provocação
+  para comentar. Escreva como quem posta o próprio clipe (1ª pessoa ou neutro). Sem hashtags.
+- hashtags: 3 a 5 (o jogo ou assunto primeiro), sem genéricas como #fyp, #viral, #foryou.
+- reacoes: 0 a 2 textos de reação (até 18 caracteres, sem emoji) que pulam na tela no instante t (segundo do vídeo,
+  dentro do clipe e depois dos 4 primeiros segundos dele): no susto, na virada, na fala absurda, na risada.
+  Vazio se não houver.
+- Varie os títulos: clipes seguidos não podem repetir a mesma fórmula."""
+
+
+def textos_clipes(clipes: list[dict], nome_video: str, projeto_id=None) -> RespostaTextos:
+    """clipes: [{"id", "inicio", "fim", "fala"}]. Só texto, no modelo rápido: ~US$ 0,001 a 0,002 por clipe."""
+    linhas = [f"id={c['id']} | {c['inicio']:.1f}-{c['fim']:.1f}s | fala: {(c.get('fala') or '(sem fala)')[:500]}"
+              for c in clipes]
+    conteudo = f"VÍDEO: {nome_video}\n\nCLIPES ({len(clipes)}):\n" + "\n".join(linhas)
+    sistema = SISTEMA_TEXTOS + _regra_idioma("titulo, legenda_post, hashtags e o texto das reacoes")
+    return _chamar_json(sistema, conteudo, RespostaTextos, projeto_id, "textos dos clipes",
+                        max_tokens=200 + 160 * len(clipes), rapido=True)

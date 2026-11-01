@@ -178,7 +178,7 @@ const Titulo: React.FC<{ texto: string; estilo: Estilo; escala: number }> = ({ t
     <div
       style={{
         position: "absolute",
-        top: height * 0.13,
+        top: height * (estilo.titulo_y ?? 0.13),
         left: "8%",
         width: "84%",
         display: "flex",

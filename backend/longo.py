@@ -783,7 +783,9 @@ def _finalizar(pid, meta, edl, res, prog) -> dict:
     descricao = (edl.get("descricao") or "").strip()
     completa = descricao
     if len(res["capitulos"]) >= 3:
-        completa = f"{descricao}\n\nCapítulos:\n{capitulos_txt}".strip()
+        rotulo = {"en": "Chapters", "es": "Capítulos", "fr": "Chapitres", "it": "Capitoli", "de": "Kapitel"}.get(
+            llm.idioma_post(), "Capítulos")
+        completa = f"{descricao}\n\n{rotulo}:\n{capitulos_txt}".strip()
     titulos = [t for t in edl.get("titulos", []) if t][:3] or [meta["nome"]]
     tags = edl.get("tags", [])
     texto = saida.with_name(projetos._nome_seguro(meta["nome"]) + "_youtube.txt")
@@ -865,7 +867,11 @@ def _thumbnails(pid: str, video: str, res: dict, texto: str, modo: str) -> list[
     arquivos = []
     for k, (_, _, quadro, rosto) in enumerate(escolhidos, 1):
         img = Image.fromarray(cv2.cvtColor(quadro, cv2.COLOR_BGR2RGB))
-        img = _compor_thumb(img, texto, "direita" if rosto is not None and rosto < 0.5 else "esquerda")
+        cam = rq.webcam_marcada(img.width, img.height) if modo == "gameplay" else None
+        if cam:  # gameplay com webcam: o rosto grande à direita e o texto à esquerda
+            img = _compor_thumb(img, texto, "esquerda", cam=img.crop(cam))
+        else:
+            img = _compor_thumb(img, texto, "direita" if rosto is not None and rosto < 0.5 else "esquerda")
         arq = projetos.pasta(pid) / "thumbs" / f"longo_{k}.jpg"
         arq.parent.mkdir(exist_ok=True)
         img.save(arq, quality=90)
@@ -873,15 +879,21 @@ def _thumbnails(pid: str, video: str, res: dict, texto: str, modo: str) -> list[
     return arquivos
 
 
-def _compor_thumb(img, texto: str, lado: str):
-    """Quadro em 1280x720 + sombra do lado do texto + texto em Anton, branco com a última linha amarela."""
-    from PIL import Image, ImageDraw, ImageFilter, ImageFont
+def _compor_thumb(img, texto: str, lado: str, cam=None):
+    """Quadro em 1280x720 + sombra do lado do texto + texto em Anton, branco com a última linha amarela.
+    `cam` (imagem da webcam): entra grande, com borda branca, no canto de baixo do lado oposto ao texto."""
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
     W, H = 1280, 720
     w, h = img.size
     escala = max(W / w, H / h)
     img = img.resize((int(w * escala + 0.5), int(h * escala + 0.5)), Image.LANCZOS)
     x0, y0 = (img.width - W) // 2, (img.height - H) // 2
     img = img.crop((x0, y0, x0 + W, y0 + H)).convert("RGB")
+    if cam is not None:
+        ch = int(H * 0.62)
+        cw = min(int(W * 0.48), int(ch * cam.width / max(1, cam.height)))
+        foto = ImageOps.expand(ImageOps.fit(cam.convert("RGB"), (cw, ch), Image.LANCZOS), border=8, fill=(255, 255, 255))
+        img.paste(foto, (W - foto.width - 28 if lado == "esquerda" else 28, H - foto.height - 28))
     palavras = texto.upper().split()
     if not palavras:
         return img

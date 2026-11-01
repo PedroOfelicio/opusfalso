@@ -1,26 +1,22 @@
 """
-Postagem nos canais do YouTube sem a API (enquanto a auditoria do Google não sai): o app monta a fila do dia e
-deixa tudo pronto para subir pelo YouTube Studio em poucos cliques.
+Prontos para postar: tudo que o app já terminou (cada corte curto e cada vídeo longo), com o título, a descrição e a
+thumbnail prontos, e a marcação de postado, num canal só do YouTube (sem a API: o upload é pelo Studio).
 
-- Canais: nome, link e quantos shorts por dia. O id do canal (UC...) sai do link, para o botão "Abrir Studio"
-  cair direto na tela de upload daquele canal.
-- Fila do dia: os clipes prontos de todos os projetos que ainda não foram postados, do melhor para o pior,
-  distribuídos em "serpentina" entre os canais (1º, 2º... último, último... 1º), para cada canal receber clipes
-  bons e médios. Um clipe nunca vai para dois canais.
-- Pasta por canal: os vídeos com o NOME DO ARQUIVO = TÍTULO (o Studio usa o nome do arquivo como título) e um
-  descricoes.txt. Os vídeos são "hard links" do clipe pronto (não ocupam espaço a mais), ou cópia se não der.
+- Item curto: chave "pid/cid"; item longo: chave "pid".
+- Estado de cada item: "pendente" (padrão), "postado" ou "descartado" (corte ruim que não vale postar).
+- Título e descrição podem ser editados aqui sem renderizar de novo (ficam por cima dos do projeto).
+- "Abrir pasta": monta DADOS/postar/<título>/ com o vídeo (NOME DO ARQUIVO = TÍTULO, que o Studio usa como título),
+  a thumbnail e a descrição em .txt, e abre no Explorer para arrastar no Studio. O vídeo é um "hard link" do
+  arquivo pronto (não ocupa espaço a mais), ou cópia se não der. Some quando o item é marcado como postado.
 
-Tudo em DADOS/postagem.json; pastas em DADOS/postar/<data>/.
+Tudo em DADOS/postagem.json.
 """
-import json
 import os
 import re
 import shutil
 import threading
 import time
 import urllib.request
-import uuid
-from datetime import date
 from pathlib import Path
 
 import config
@@ -28,6 +24,7 @@ import projetos
 
 ARQ = config.DADOS / "postagem.json"
 PASTA = config.DADOS / "postar"
+ESTADOS = ("pendente", "postado", "descartado")
 _trava = threading.RLock()
 
 # Caracteres proibidos no nome de arquivo do Windows -> parecidos permitidos (o título continua legível)
@@ -36,9 +33,8 @@ TROCAS_NOME = {"?": "？", ":": "：", "/": "／", "\\": "＼", "*": "＊", '"':
 
 def _ler() -> dict:
     d = config.ler_json(ARQ, {}) or {}
-    d.setdefault("canais", [])
-    d.setdefault("postados", {})   # "pid/cid" -> {"canal": id | None, "em": ts}   (None = pulado)
-    d.setdefault("fila", None)     # {"data": "AAAA-MM-DD", "itens": [{"canal", "clips": ["pid/cid"], "postado"}]}
+    d.setdefault("canal", {"url": "", "channel_id": None})
+    d.setdefault("itens", {})   # chave -> {"estado": "postado"|"descartado", "em": ts, "titulo"?, "descricao"?}
     return d
 
 
@@ -47,11 +43,7 @@ def _gravar(d: dict) -> dict:
     return d
 
 
-def _hoje() -> str:
-    return date.today().isoformat()
-
-
-# ================================================================ canais
+# ================================================================ canal
 
 def id_do_canal(url: str) -> str | None:
     """UC... a partir do link do canal. Link com @nome: lê a página pública do canal (sem API)."""
@@ -73,66 +65,26 @@ def id_do_canal(url: str) -> str | None:
     return m.group(1) if m else None
 
 
-def salvar_canal(dados: dict, cid: str | None = None) -> dict:
-    with _trava:
-        d = _ler()
-        canal = next((c for c in d["canais"] if c["id"] == cid), None) if cid else None
-        if cid and canal is None:
-            raise KeyError(cid)
-        if canal is None:
-            canal = {"id": uuid.uuid4().hex[:8], "ativo": True, "criado_em": time.time()}
-            d["canais"].append(canal)
-        if "nome" in dados:
-            canal["nome"] = str(dados["nome"]).strip()[:60] or "Canal"
-        if "url" in dados and dados["url"] != canal.get("url"):
-            canal["url"] = str(dados["url"] or "").strip()
-            canal["channel_id"] = id_do_canal(canal["url"])
-        if "por_dia" in dados:
-            canal["por_dia"] = max(1, min(int(dados["por_dia"]), 50))
-        if "ativo" in dados:
-            canal["ativo"] = bool(dados["ativo"])
-        canal.setdefault("por_dia", 5)
-        canal.setdefault("url", "")
-        canal.setdefault("channel_id", None)
-        _gravar(d)
-        return canal
-
-
-def excluir_canal(cid: str) -> None:
-    with _trava:
-        d = _ler()
-        d["canais"] = [c for c in d["canais"] if c["id"] != cid]
-        if d["fila"]:
-            d["fila"]["itens"] = [i for i in d["fila"]["itens"] if i["canal"] != cid]
-        _gravar(d)
-
-
 def url_studio(canal: dict) -> str:
     if canal.get("channel_id"):
         return f"https://studio.youtube.com/channel/{canal['channel_id']}/videos/upload?d=ud"
     return "https://studio.youtube.com/"
 
 
-# ================================================================ clipes e fila
+def salvar_canal(url: str) -> dict:
+    url = (url or "").strip()
+    canal = {"url": url, "channel_id": id_do_canal(url)}
+    with _trava:
+        d = _ler()
+        d["canal"] = canal
+        _gravar(d)
+    return estado()
 
-def _clipes_prontos() -> dict[str, dict]:
-    """"pid/cid" -> dados do clipe, de todos os projetos de clipes curtos (só os com arquivo no disco)."""
-    saida = {}
-    for meta in projetos.listar():
-        if meta.get("tipo", "curto") != "curto":
-            continue
-        for c in meta.get("clips", []):
-            if c.get("status") == "pronto" and c.get("arquivo") and Path(c["arquivo"]).is_file():
-                saida[f"{meta['id']}/{c['id']}"] = {
-                    "pid": meta["id"], "cid": c["id"], "projeto": meta.get("nome", ""), "arquivo": c["arquivo"],
-                    "titulo": (c.get("titulo") or "").strip(), "nota": int(c.get("nota") or 0),
-                    "descricao": descricao(c), "duracao": c.get("duracao"), "versao": c.get("versao", 0),
-                    "criado_em": meta.get("criado_em", 0),
-                }
-    return saida
 
+# ================================================================ itens prontos
 
 def descricao(clip: dict) -> str:
+    """Descrição de um Short: o texto do post e as hashtags, sempre com #shorts."""
     texto = (clip.get("legenda_post") or "").strip()
     tags = [t if t.startswith("#") else f"#{t}" for t in (clip.get("hashtags") or [])]
     if not any(t.lower() == "#shorts" for t in tags):
@@ -140,92 +92,121 @@ def descricao(clip: dict) -> str:
     return (texto + "\n\n" + " ".join(tags)).strip()
 
 
-def distribuir(chaves: list[str], canais: list[dict]) -> dict[str, list[str]]:
-    """Serpentina: rodada 1 do 1º ao último canal, rodada 2 do último ao 1º... até cada um ter o seu por_dia.
-    `chaves` já vem do melhor para o pior clipe."""
-    vagas = {c["id"]: c.get("por_dia", 5) for c in canais}
-    saida = {c["id"]: [] for c in canais}
-    ordem = [c["id"] for c in canais]
-    k, rodada = 0, 0
-    while k < len(chaves) and any(vagas.values()):
-        for cid in (ordem if rodada % 2 == 0 else ordem[::-1]):
-            if k >= len(chaves):
-                break
-            if vagas[cid] > 0:
-                saida[cid].append(chaves[k])
-                vagas[cid] -= 1
-                k += 1
-        rodada += 1
+def _descricao_longo(lg: dict) -> str:
+    texto = (lg.get("descricao_completa") or lg.get("descricao") or "").strip()
+    tags = [t.strip() for t in lg.get("tags") or [] if t.strip()]
+    if tags:  # as 3 primeiras viram hashtag (o YouTube mostra em cima do título)
+        texto += "\n\n" + " ".join("#" + re.sub(r"\W+", "", t) for t in tags[:3])
+    return texto.strip()
+
+
+def _brutos() -> list[dict]:
+    """Tudo que está pronto no disco, com os textos do projeto (antes das edições feitas aqui)."""
+    saida = []
+    for meta in projetos.listar():
+        pid, nome, criado = meta["id"], meta.get("nome", ""), meta.get("criado_em", 0)
+        if meta.get("tipo", "curto") == "longo":
+            lg = meta.get("longo") or {}
+            if not lg.get("arquivo") or not Path(lg["arquivo"]).is_file():
+                continue
+            v = lg.get("versao", 0)
+            thumbs = [t for t in lg.get("thumbs") or [] if Path(t).is_file()]
+            saida.append({
+                "chave": pid, "tipo": "longo", "pid": pid, "cid": None, "projeto": nome, "criado_em": criado,
+                "arquivo": lg["arquivo"], "thumbs": thumbs, "nota": None, "duracao": lg.get("duracao"),
+                "titulo": ((lg.get("titulos") or [""])[0] or nome).strip(), "titulos": lg.get("titulos") or [],
+                "descricao": _descricao_longo(lg), "tags": lg.get("tags") or [],
+                "video_url": f"/api/projetos/{pid}/longo/video?v={v}",
+                "thumbs_url": [f"/api/projetos/{pid}/longo/thumb/{k}?v={v}" for k in range(len(thumbs))],
+            })
+            continue
+        for c in meta.get("clips", []):
+            if c.get("status") != "pronto" or not c.get("arquivo") or not Path(c["arquivo"]).is_file():
+                continue
+            v, cid = c.get("versao", 0), c["id"]
+            capa = c.get("capa") if c.get("capa") and Path(c["capa"]).is_file() else None
+            saida.append({
+                "chave": f"{pid}/{cid}", "tipo": "curto", "pid": pid, "cid": cid, "projeto": nome, "criado_em": criado,
+                "arquivo": c["arquivo"], "thumbs": [capa] if capa else [], "nota": int(c.get("nota") or 0),
+                "duracao": c.get("duracao"), "titulo": (c.get("titulo") or "").strip(), "titulos": [],
+                "descricao": descricao(c), "tags": [],
+                "video_url": f"/api/projetos/{pid}/clips/{cid}/video?v={v}",
+                "thumbs_url": [f"/api/projetos/{pid}/clips/{cid}/capa?v={v}" if capa
+                               else f"/api/projetos/{pid}/clips/{cid}/thumb?v={v}"],
+            })
     return saida
 
 
-def montar_fila() -> dict:
-    """Refaz a fila de hoje com os clipes ainda não postados. Canais já marcados como postados hoje ficam como
-    estão; os outros recebem os melhores clipes disponíveis."""
+def itens() -> list[dict]:
+    """Os itens prontos com o estado e as edições aplicados: os mais novos primeiro e, no mesmo projeto, os curtos
+    pela nota (melhores primeiro)."""
+    marcas = _ler()["itens"]
+    saida = []
+    for it in _brutos():
+        m = marcas.get(it["chave"]) or {}
+        it["estado"] = m.get("estado", "pendente")
+        it["marcado_em"] = m.get("em")
+        it["titulo"] = m.get("titulo") or it["titulo"]
+        it["descricao"] = m.get("descricao") if m.get("descricao") is not None else it["descricao"]
+        it["editado"] = bool(m.get("titulo") or m.get("descricao") is not None)
+        saida.append(it)
+    saida.sort(key=lambda i: (-i["criado_em"], i["tipo"] != "longo", -(i["nota"] or 0), i["chave"]))
+    return saida
+
+
+def _item(chave: str) -> dict:
+    for it in itens():
+        if it["chave"] == chave:
+            return it
+    raise KeyError("Item não encontrado (o arquivo pode ter sido apagado).")
+
+
+def marcar(chave: str, novo: str) -> dict:
+    if novo not in ESTADOS:
+        raise ValueError(f"Estado inválido: {novo}")
+    _item(chave)
     with _trava:
         d = _ler()
-        prontos = _clipes_prontos()
-        fila = d["fila"] if d["fila"] and d["fila"]["data"] == _hoje() else {"data": _hoje(), "itens": []}
-        feitos = [i for i in fila["itens"] if i.get("postado")]
-        ocupados = {k for i in feitos for k in i["clips"]}
-        livres = [k for k in prontos if k not in d["postados"] and k not in ocupados]
-        livres.sort(key=lambda k: (-prontos[k]["nota"], -prontos[k]["criado_em"], k))
-        canais = [c for c in d["canais"] if c.get("ativo", True) and c["id"] not in {i["canal"] for i in feitos}]
-        partes = distribuir(livres, canais)
-        fila["itens"] = feitos + [{"canal": c["id"], "clips": partes[c["id"]], "postado": False}
-                                  for c in canais if partes[c["id"]]]
-        ordem = {c["id"]: k for k, c in enumerate(d["canais"])}
-        fila["itens"].sort(key=lambda i: ordem.get(i["canal"], 999))
-        d["fila"] = fila
+        m = d["itens"].setdefault(chave, {})
+        if novo == "pendente":
+            m.pop("estado", None)
+            m.pop("em", None)
+        else:
+            m.update(estado=novo, em=time.time())
+        if not m:
+            d["itens"].pop(chave)
         _gravar(d)
+    if novo != "pendente":  # a pasta só servia para subir no Studio
+        shutil.rmtree(_pasta_item(chave), ignore_errors=True)
     return estado()
 
 
-def _item(d: dict, canal_id: str) -> dict:
-    fila = d["fila"]
-    if not fila or fila["data"] != _hoje():
-        raise KeyError("Sem fila de hoje: monte a fila primeiro.")
-    for i in fila["itens"]:
-        if i["canal"] == canal_id:
-            return i
-    raise KeyError("Canal fora da fila de hoje.")
-
-
-def pular(chave: str) -> dict:
-    """Tira o clipe da fila e nunca mais o oferece (clipe ruim)."""
+def editar_textos(chave: str, titulo: str | None = None, descricao_nova: str | None = None) -> dict:
+    """Troca o título ou a descrição do post (texto vazio no título = volta ao do projeto)."""
+    _item(chave)
     with _trava:
         d = _ler()
-        d["postados"][chave] = {"canal": None, "em": time.time()}
-        if d["fila"]:
-            for i in d["fila"]["itens"]:
-                if chave in i["clips"] and not i.get("postado"):
-                    i["clips"].remove(chave)
-        _gravar(d)
-    return estado()
-
-
-def marcar_postado(canal_id: str, postado: bool = True) -> dict:
-    with _trava:
-        d = _ler()
-        item = _item(d, canal_id)
-        item["postado"] = postado
-        for k in item["clips"]:
-            if postado:
-                d["postados"][k] = {"canal": canal_id, "em": time.time()}
+        m = d["itens"].setdefault(chave, {})
+        if titulo is not None:
+            if titulo.strip():
+                m["titulo"] = titulo.strip()[:100]
             else:
-                d["postados"].pop(k, None)
+                m.pop("titulo", None)
+        if descricao_nova is not None:
+            m["descricao"] = descricao_nova.strip()[:5000]
+        if not m:
+            d["itens"].pop(chave)
         _gravar(d)
-    if postado:  # a pasta só servia para subir no Studio
-        shutil.rmtree(_pasta_canal(canal_id), ignore_errors=True)
     return estado()
 
 
 # ================================================================ pasta para o Studio
 
-def nome_arquivo(titulo: str, usados: set[str]) -> str:
+def nome_arquivo(titulo: str, usados: set[str] | None = None) -> str:
     """Título -> nome de arquivo válido no Windows, que o Studio transforma de volta no título."""
+    usados = set() if usados is None else usados
     nome = "".join(TROCAS_NOME.get(ch, ch) for ch in (titulo or "").strip())
-    nome = re.sub(r"[\x00-\x1f]", "", nome).strip(" .")[:95] or "short"
+    nome = re.sub(r"[\x00-\x1f]", "", nome).strip(" .")[:95] or "video"
     final, n = nome, 2
     while final.lower() in usados:
         final, n = f"{nome} ({n})", n + 1
@@ -233,70 +214,39 @@ def nome_arquivo(titulo: str, usados: set[str]) -> str:
     return final + ".mp4"
 
 
-def _pasta_canal(canal_id: str) -> Path:
-    d = _ler()
-    canais = d["canais"]
-    pos = next((k for k, c in enumerate(canais) if c["id"] == canal_id), None)
-    nome = canais[pos]["nome"] if pos is not None else canal_id
-    seguro = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", nome).strip(" .") or canal_id
-    return PASTA / _hoje() / f"{(pos or 0) + 1:02d} - {seguro}"
+def _pasta_item(chave: str) -> Path:
+    return PASTA / re.sub(r"[^\w-]", "_", chave)
 
 
-def preparar_pasta(canal_id: str) -> Path:
-    """Pasta do canal com os vídeos (nome = título) e o descricoes.txt. Refeita a cada chamada."""
+def _ligar(origem: str, destino: Path) -> None:
+    try:
+        os.link(origem, destino)  # mesmo disco: não ocupa espaço a mais
+    except OSError:
+        shutil.copy2(origem, destino)
+
+
+def preparar_pasta(chave: str) -> Path:
+    """Pasta do item com o vídeo (nome = título), a(s) thumbnail(s) e a descrição. Refeita a cada chamada."""
+    it = _item(chave)
+    pasta = _pasta_item(chave)
     with _trava:
-        d = _ler()
-        item = _item(d, canal_id)
-        prontos = _clipes_prontos()
-        pasta = _pasta_canal(canal_id)
         shutil.rmtree(pasta, ignore_errors=True)
         pasta.mkdir(parents=True, exist_ok=True)
-        usados, linhas = set(), []
-        for k in item["clips"]:
-            c = prontos.get(k)
-            if not c:
-                continue
-            arq = pasta / nome_arquivo(c["titulo"], usados)
-            try:
-                os.link(c["arquivo"], arq)  # mesmo disco: não ocupa espaço a mais
-            except OSError:
-                shutil.copy2(c["arquivo"], arq)
-            linhas += [f"=== {arq.stem}", c["descricao"], ""]
-        (pasta / "descricoes.txt").write_text("\n".join(linhas), encoding="utf-8-sig")
-        _limpar_dias_antigos()
-        return pasta
-
-
-def _limpar_dias_antigos() -> None:
-    for p in PASTA.glob("*"):
-        if p.is_dir() and p.name < _hoje():
-            shutil.rmtree(p, ignore_errors=True)
+        _ligar(it["arquivo"], pasta / nome_arquivo(it["titulo"]))
+        for k, t in enumerate(it["thumbs"], 1):
+            _ligar(t, pasta / (f"thumbnail_{k}.jpg" if len(it["thumbs"]) > 1 else "thumbnail.jpg"))
+        texto = f"TÍTULO\n{it['titulo']}\n\nDESCRIÇÃO\n{it['descricao']}\n"
+        if it["tags"]:
+            texto += f"\nTAGS\n{', '.join(it['tags'])}\n"
+        (pasta / "descricao.txt").write_text(texto, encoding="utf-8-sig")
+    return pasta
 
 
 # ================================================================ estado para a interface
 
 def estado() -> dict:
     d = _ler()
-    prontos = _clipes_prontos()
-    fila = d["fila"] if d["fila"] and d["fila"]["data"] == _hoje() else None
-    na_fila = {k for i in (fila or {}).get("itens", []) for k in i["clips"]}
-    por_canal = {c["id"]: c for c in d["canais"]}
-    itens = []
-    for i in (fila or {}).get("itens", []):
-        canal = por_canal.get(i["canal"])
-        if not canal:
-            continue
-        clips = []
-        for k in i["clips"]:
-            c = prontos.get(k)
-            if not c:
-                continue
-            clips.append({"chave": k, "pid": c["pid"], "cid": c["cid"], "titulo": c["titulo"], "nota": c["nota"],
-                          "descricao": c["descricao"], "projeto": c["projeto"], "duracao": c["duracao"],
-                          "thumb_url": f"/api/projetos/{c['pid']}/clips/{c['cid']}/thumb?v={c['versao']}",
-                          "video_url": f"/api/projetos/{c['pid']}/clips/{c['cid']}/video?v={c['versao']}"})
-        itens.append({"canal": canal, "postado": bool(i.get("postado")), "clips": clips,
-                      "studio_url": url_studio(canal)})
-    disponiveis = sum(1 for k in prontos if k not in d["postados"] and k not in na_fila)
-    return {"canais": d["canais"], "data": _hoje(), "fila": itens, "disponiveis": disponiveis,
-            "postados_total": sum(1 for v in d["postados"].values() if v.get("canal"))}
+    lista = itens()
+    publicos = [{k: v for k, v in it.items() if k not in ("arquivo", "thumbs")} for it in lista]
+    contagem = {e: sum(1 for i in lista if i["estado"] == e) for e in ESTADOS}
+    return {"canal": d["canal"], "studio_url": url_studio(d["canal"]), "itens": publicos, "contagem": contagem}

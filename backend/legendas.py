@@ -123,7 +123,7 @@ def gerar_ass(palavras: list[dict], est: dict, saida: str | Path, largura: int, 
         f"{cor_sombra},0,0,0,0,100,100,1,0,1,{est.get('contorno', 8) * escala:.1f},{est.get('sombra', 4) * escala:.1f},5,60,60,0,1",
         # BorderStyle 3 = caixa opaca atrás do texto (a cor da caixa é a OutlineColour)
         f"Style: Titulo,{est['fonte']},{tam_tit},{_ass_cor(tit.get('cor_texto', '#000000'))},&H000000FF,"
-        f"{_ass_cor(tit.get('cor_fundo', '#FFE600'))},&H64000000,0,0,0,0,100,100,0,0,3,{18 * escala:.1f},0,8,90,90,{int(altura * 0.13)},1",
+        f"{_ass_cor(tit.get('cor_fundo', '#FFE600'))},&H64000000,0,0,0,0,100,100,0,0,3,{18 * escala:.1f},0,8,90,90,{int(altura * est.get('titulo_y', 0.13))},1",
         "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
 

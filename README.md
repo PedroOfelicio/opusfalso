@@ -382,8 +382,9 @@ automaticamente e um aviso aparece no projeto:
    numa **montagem**; movimentação só entra quando falta ação.
 5. Com "remover silêncios", corta também o tempo morto pelo áudio (energia baixa e ninguém falando).
 
-O layout padrão é **jogo** (recorte 4:5 grande no centro da mira, ~70% da tela) ou **split** quando há
-**facecam** (detectada quando um rosto fica parado no mesmo lugar) ou **vídeo de apoio**.
+O layout padrão é **cam_topo** (webcam em cima, 40% da altura, e o centro do jogo embaixo) quando há webcam:
+o retângulo marcado em Configurações > Formato dos cortes ou, sem ele, a **facecam** achada pelo rosto. Sem
+webcam, **jogo** (recorte 4:5 grande no centro da mira, ~70% da tela) ou **split** com **vídeo de apoio**.
 
 **Custo típico** (Sonnet 5.5, esforço baixo): ~US$ 0,02 na escolha + ~US$ 0,005 por clipe na revisão,
 ou seja ~US$ 0,035 para 3 clipes. Em Configurações, "Modelo da revisão fina" = Haiku corta a revisão pela
@@ -458,6 +459,7 @@ Em duas passadas sobre o clipe cortado:
 | `dupla` | Duas pessoas: uma em cima, outra embaixo (split-screen) |
 | `centro` | Recorte fixo, com deslocamento horizontal manual |
 | `inteiro` | Vídeo inteiro no meio, fundo desfocado |
+| `cam_topo` | Webcam em cima (retângulo marcado em Configurações) e gameplay embaixo |
 | `split` | Gameplay em cima, facecam ou vídeo de apoio embaixo |
 
 Saída: 1080×1920 (9:16), 1080×1080 (1:1) ou 1920×1080 (16:9), sempre a **30 fps**.

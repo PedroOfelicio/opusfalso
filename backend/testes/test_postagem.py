@@ -1,6 +1,7 @@
 """
-Testes da fila de postagem nos canais (sem a API do YouTube): distribuição em serpentina, nenhum clipe em dois
-canais, pasta com nome de arquivo = título e marcar como postado. Sem rede. Rodar de dentro de backend/:
+Testes da aba Prontos (um canal, sem a API do YouTube): lista dos cortes e vídeos longos prontos, ordem, marcar
+postado/descartado, editar título e descrição e pasta com nome de arquivo = título. Sem rede. Rodar de dentro de
+backend/:
     C:\\opusfalso-dados\\venv\\Scripts\\python.exe -m unittest discover -s testes -v
 """
 import shutil
@@ -12,18 +13,6 @@ from unittest import mock
 import postagem
 
 
-class Distribuicao(unittest.TestCase):
-    def test_serpentina_equilibra_os_canais(self):
-        canais = [{"id": "a", "por_dia": 2}, {"id": "b", "por_dia": 2}, {"id": "c", "por_dia": 2}]
-        r = postagem.distribuir([f"k{i}" for i in range(1, 8)], canais)
-        self.assertEqual(r, {"a": ["k1", "k6"], "b": ["k2", "k5"], "c": ["k3", "k4"]})  # k7 sobra
-
-    def test_por_dia_diferente_e_poucos_clipes(self):
-        canais = [{"id": "a", "por_dia": 1}, {"id": "b", "por_dia": 3}]
-        self.assertEqual(postagem.distribuir(["1", "2", "3"], canais), {"a": ["1"], "b": ["2", "3"]})
-        self.assertEqual(postagem.distribuir([], canais), {"a": [], "b": []})
-
-
 class NomesELinks(unittest.TestCase):
     def test_nome_do_arquivo_vira_o_titulo(self):
         usados = set()
@@ -31,7 +20,7 @@ class NomesELinks(unittest.TestCase):
                          "He did WHAT？! ''no way'' 1／2.mp4")
         self.assertEqual(postagem.nome_arquivo("Same", usados), "Same.mp4")
         self.assertEqual(postagem.nome_arquivo("same", usados), "same (2).mp4")
-        self.assertEqual(postagem.nome_arquivo("", usados), "short.mp4")
+        self.assertEqual(postagem.nome_arquivo("", usados), "video.mp4")
 
     def test_id_do_canal_pelo_link(self):
         uc = "UC" + "a1B2c3D4e5F6g7H8i9J0kL"
@@ -41,68 +30,94 @@ class NomesELinks(unittest.TestCase):
         self.assertEqual(postagem.url_studio({"channel_id": None}), "https://studio.youtube.com/")
 
     def test_descricao_sempre_com_shorts(self):
-        self.assertEqual(postagem.descricao({"legenda_post": "Olha isso", "hashtags": ["roblox", "#Shorts"]}),
-                         "Olha isso\n\n#roblox #Shorts")
+        self.assertEqual(postagem.descricao({"legenda_post": "Look at this", "hashtags": ["roblox", "#Shorts"]}),
+                         "Look at this\n\n#roblox #Shorts")
         self.assertEqual(postagem.descricao({}), "#shorts")
 
 
-class FilaDoDia(unittest.TestCase):
+class Prontos(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="postagem_teste_"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="prontos_teste_"))
         metas = []
         for p in range(2):
             clips = []
             for c in range(3):
                 arq = self.tmp / f"p{p}c{c}.mp4"
                 arq.write_bytes(b"video")
-                clips.append({"id": f"clip_0{c}", "status": "pronto", "arquivo": str(arq), "nota": 90 - 10 * c - p,
-                              "titulo": f"Titulo {p}{c}", "hashtags": ["roblox"]})
+                capa = self.tmp / f"p{p}c{c}_capa.jpg"
+                capa.write_bytes(b"jpg")
+                clips.append({"id": f"clip_0{c}", "status": "pronto", "arquivo": str(arq), "capa": str(capa),
+                              "nota": 70 + 10 * c, "titulo": f"Title {p}{c}", "hashtags": ["roblox"],
+                              "legenda_post": "Would you do it?"})
             clips.append({"id": "clip_09", "status": "erro", "arquivo": None})
+            clips.append({"id": "clip_08", "status": "pronto", "arquivo": str(self.tmp / "sumiu.mp4")})
             metas.append({"id": f"proj{p}aaaaaa", "tipo": "curto", "nome": f"P{p}", "criado_em": p, "clips": clips})
-        metas.append({"id": "longoaaaaaaa", "tipo": "longo", "nome": "L", "clips": [
-            {"id": "clip_01", "status": "pronto", "arquivo": str(self.tmp / "p0c0.mp4"), "nota": 99}]})
+        longo = self.tmp / "longo.mp4"
+        longo.write_bytes(b"video")
+        thumbs = []
+        for k in range(3):
+            t = self.tmp / f"longo_{k}.jpg"
+            t.write_bytes(b"jpg")
+            thumbs.append(str(t))
+        metas.append({"id": "longoaaaaaaa", "tipo": "longo", "nome": "L", "criado_em": 1, "longo": {
+            "arquivo": str(longo), "thumbs": thumbs, "titulos": ["Best title", "Other"], "tags": ["roblox", "obby game"],
+            "descricao_completa": "A long video.\n\nChapters:\n0:00 Start"}})
         self.patches = [mock.patch.object(postagem, "ARQ", self.tmp / "postagem.json"),
                         mock.patch.object(postagem, "PASTA", self.tmp / "postar"),
                         mock.patch.object(postagem.projetos, "listar", return_value=metas)]
         for p in self.patches:
             p.start()
-        for nome in ("A", "B"):
-            postagem.salvar_canal({"nome": nome, "url": "", "por_dia": 2})
 
     def tearDown(self):
         for p in self.patches:
             p.stop()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_fila_pasta_e_postado(self):
-        e = postagem.montar_fila()
-        chaves = [[c["chave"] for c in i["clips"]] for i in e["fila"]]
-        self.assertEqual(len(e["fila"]), 2)
-        todos = sum(chaves, [])
-        self.assertEqual(len(todos), len(set(todos)))                 # nenhum clipe em dois canais
-        self.assertNotIn("longoaaaaaaa/clip_01", todos)               # vídeo longo não entra
-        self.assertEqual(chaves[0][0], "proj0aaaaaa/clip_00")         # o melhor vai para o 1º canal
-        self.assertEqual(e["disponiveis"], 2)
+    def test_lista_e_ordem(self):
+        e = postagem.estado()
+        chaves = [i["chave"] for i in e["itens"]]
+        # mais novos primeiro; no mesmo projeto, o longo antes e os curtos pela nota
+        self.assertEqual(chaves, ["longoaaaaaaa", "proj1aaaaaa/clip_02", "proj1aaaaaa/clip_01", "proj1aaaaaa/clip_00",
+                                  "proj0aaaaaa/clip_02", "proj0aaaaaa/clip_01", "proj0aaaaaa/clip_00"])
+        self.assertEqual(e["contagem"], {"pendente": 7, "postado": 0, "descartado": 0})
+        longo = e["itens"][0]
+        self.assertEqual(longo["titulo"], "Best title")
+        self.assertIn("#roblox #obbygame", longo["descricao"])
+        self.assertEqual(len(longo["thumbs_url"]), 3)
+        self.assertNotIn("arquivo", longo)  # caminhos internos não vão para a interface
+        self.assertIn("/capa", e["itens"][1]["thumbs_url"][0])
 
-        canal_a = e["fila"][0]["canal"]["id"]
-        pasta = postagem.preparar_pasta(canal_a)
-        nomes = sorted(p.name for p in pasta.glob("*.mp4"))
-        self.assertEqual(len(nomes), 2)
-        self.assertTrue(all(n.startswith("Titulo") for n in nomes))
-        self.assertIn("#shorts", (pasta / "descricoes.txt").read_text(encoding="utf-8-sig"))
+    def test_marcar_e_editar(self):
+        postagem.marcar("proj0aaaaaa/clip_00", "postado")
+        e = postagem.marcar("proj0aaaaaa/clip_01", "descartado")
+        self.assertEqual(e["contagem"], {"pendente": 5, "postado": 1, "descartado": 1})
+        e = postagem.marcar("proj0aaaaaa/clip_00", "pendente")
+        self.assertEqual(e["contagem"]["postado"], 0)
+        with self.assertRaises(ValueError):
+            postagem.marcar("proj0aaaaaa/clip_00", "talvez")
+        with self.assertRaises(KeyError):
+            postagem.marcar("proj0aaaaaa/clip_08", "postado")  # arquivo sumiu: não está pronto
 
-        e = postagem.marcar_postado(canal_a)
-        self.assertFalse(pasta.exists())
-        self.assertEqual(e["postados_total"], 2)
-        e = postagem.montar_fila()                                    # refazer não mexe no canal já postado
-        self.assertEqual([c["chave"] for c in e["fila"][0]["clips"]], chaves[0])
-        self.assertTrue(e["fila"][0]["postado"])
-        self.assertNotIn(chaves[0][0], sum([[c["chave"] for c in i["clips"]] for i in e["fila"][1:]], []))
+        e = postagem.editar_textos("proj1aaaaaa/clip_02", "New title", "New text #shorts")
+        item = next(i for i in e["itens"] if i["chave"] == "proj1aaaaaa/clip_02")
+        self.assertEqual((item["titulo"], item["descricao"], item["editado"]), ("New title", "New text #shorts", True))
+        e = postagem.editar_textos("proj1aaaaaa/clip_02", "")  # título vazio volta ao do projeto
+        item = next(i for i in e["itens"] if i["chave"] == "proj1aaaaaa/clip_02")
+        self.assertEqual(item["titulo"], "Title 12")
 
-    def test_pular_tira_da_fila_para_sempre(self):
-        e = postagem.montar_fila()
-        chave = e["fila"][0]["clips"][0]["chave"]
-        postagem.pular(chave)
-        e = postagem.montar_fila()
-        self.assertNotIn(chave, [c["chave"] for i in e["fila"] for c in i["clips"]])
-        self.assertEqual(e["postados_total"], 0)  # pulado não conta como postado
+    def test_pasta_com_nome_do_titulo(self):
+        pasta = postagem.preparar_pasta("proj0aaaaaa/clip_02")
+        self.assertEqual(sorted(p.name for p in pasta.iterdir()), ["Title 02.mp4", "descricao.txt", "thumbnail.jpg"])
+        self.assertIn("#shorts", (pasta / "descricao.txt").read_text(encoding="utf-8-sig"))
+        postagem.marcar("proj0aaaaaa/clip_02", "postado")
+        self.assertFalse(pasta.exists())  # postado: a pasta some
+
+        pasta = postagem.preparar_pasta("longoaaaaaaa")
+        nomes = sorted(p.name for p in pasta.iterdir())
+        self.assertEqual(nomes, ["Best title.mp4", "descricao.txt", "thumbnail_1.jpg", "thumbnail_2.jpg",
+                                 "thumbnail_3.jpg"])
+        self.assertIn("TAGS\nroblox, obby game", (pasta / "descricao.txt").read_text(encoding="utf-8-sig"))
+
+
+if __name__ == "__main__":
+    unittest.main()

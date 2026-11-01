@@ -351,6 +351,7 @@ def _cortes_na_batida(trechos: list[tuple[float, float]], inicio_saida: float, m
 # Altura da legenda (centro, fração da tela) por enquadramento. Rosto e recorte central: a do estilo.
 POSICAO_POR_LAYOUT = {
     "split": 0.57,    # gameplay em cima (até 60%) e facecam embaixo: na divisa, sem cobrir rosto nem mira
+    "cam_topo": 0.40, # webcam em cima (até 40%) e jogo embaixo: na divisa, longe da mira (no meio do jogo)
     "dupla": 0.50,    # duas pessoas uma sobre a outra: entre as duas
     "jogo": 0.885,    # janela do jogo vai de 13% a 84%: embaixo dela, longe da mira e do HUD
     "pip": 0.885,     # igual ao "jogo" (a facecam fica no canto de cima da janela)
@@ -364,6 +365,8 @@ def _layout_previsto(opc, analise) -> str:
     if layout == "split" and not rq._facecam(analise) and not opc.video_apoio:
         return "jogo"
     if layout == "pip" and not rq._facecam(analise):
+        return "jogo"
+    if layout == "cam_topo" and not rq.fonte_da_cam(analise):
         return "jogo"
     if layout == "dupla" and len(analise.trilhas) < 2:
         return "rosto"
@@ -610,7 +613,10 @@ def _renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progre
 
     # Legenda que não tampa nada: a altura depende do enquadramento (que já dá para saber agora)
     analise_rq = rq.analisar(corte, cancelado)
-    est = {**est, "posicao_y": _posicao_legenda(_layout_previsto(opc, analise_rq), est)}
+    layout = _layout_previsto(opc, analise_rq)
+    est = {**est, "posicao_y": _posicao_legenda(layout, est)}
+    if layout == "cam_topo":  # título gancho logo abaixo da divisa (em cima ele taparia o rosto)
+        est["titulo_y"] = rq.FRACAO_CAM + 0.07
 
     info, usou_remotion = None, False
     if cfg["estilo"] == "animada" and (cfg["legenda_ativa"] or titulo):
@@ -635,7 +641,8 @@ def _renderizar_clip(pid: str, cid: str, transcricao: dict | None = None, progre
 
     thumb = pasta / "thumbs" / f"{cid}.jpg"
     ef.extrair_frame(saida, min(1.2, duracao / 2), thumb, largura=540)
-    capa = _capa(meta, clip, corte, saida_dir, cid)
+    capa = _capa(meta, clip, corte, saida_dir, cid, titulo,
+                 rq.fonte_da_cam(analise_rq) if layout == "cam_topo" else None, cfg["cor_borda"])
 
     def f(m):
         c = projetos.clip(m, cid)
@@ -702,14 +709,19 @@ def _memes(pal_clip: list[dict], semente: str, duracao: float, inicio_replay: fl
             brolls.append((t, round(min(t + memes.DURACAO_VIDEO, fim_util), 3), arquivo))
 
 
-def _capa(meta: dict, clip: dict, corte: Path, saida_dir: Path, cid: str) -> str | None:
-    """Capa 1080x1920 com o título, do melhor quadro do clipe (o corte ainda sem legenda nem efeitos)."""
+def _capa(meta: dict, clip: dict, corte: Path, saida_dir: Path, cid: str, titulo: str | None = None,
+          cam=None, cor_borda: str | None = None) -> str | None:
+    """Capa 1080x1920 com o título, do melhor quadro do clipe (o corte ainda sem legenda nem efeitos).
+    Com `cam` (layout "cam_topo"), a capa tem a mesma cara do vídeo: webcam em cima e jogo embaixo."""
     try:
         quadro, rosto = enfeites.melhor_quadro(str(corte), com_rosto=meta["modo"] == "falado")
         if quadro is None:
             return None
+        if cam:
+            quadro = rq.quadro_cam_topo(quadro, cam, *rq.RESOLUCOES["9:16"],
+                                        borda=rq._hex_bgr(cor_borda) if cor_borda else None)
         arq = saida_dir / f"{cid}_capa.jpg"
-        enfeites.capa_vertical(quadro, clip.get("titulo") or "", rosto).save(arq, quality=90)
+        enfeites.capa_vertical(quadro, titulo or clip.get("titulo") or "", rosto).save(arq, quality=90)
         return str(arq)
     except Exception as e:  # capa é extra: nunca derruba o render
         log.warning("Capa do %s falhou: %s", cid, e)
@@ -1193,6 +1205,36 @@ def _folha_de_quadros(video, inicio: float, fim: float, n: int = 8, largura: int
     return buf.tobytes() if ok else None
 
 
+LOTE_TEXTOS = 25
+
+
+def _textos_volume(cortes: list[Corte], transcricao: dict, meta: dict, pid: str, prog) -> None:
+    """Modo volume com IA: o código já cortou; o Claude só escreve título, texto do post, hashtags e reações,
+    em lotes e só com o texto da fala (sem imagens). Se a IA falhar, ficam os títulos locais."""
+    for k in range(0, len(cortes), LOTE_TEXTOS):
+        parte = cortes[k:k + LOTE_TEXTOS]
+        prog(k / len(cortes), f"Escrevendo títulos e descrições ({k + 1}-{k + len(parte)} de {len(cortes)})")
+        itens = [{"id": k + j, "inicio": c.inicio, "fim": c.fim, "fala": _fala_com_tempos(transcricao, c.inicio, c.fim)}
+                 for j, c in enumerate(parte)]
+        try:
+            resposta = llm.textos_clipes(itens, meta.get("nome") or "", pid)
+        except llm.ErroClaude as e:
+            _claude_falhou(pid, e)
+            return
+        por_id = {t.id: t for t in resposta.clipes}
+        for j, c in enumerate(parte):
+            t = por_id.get(k + j)
+            if t is None:
+                continue
+            if t.titulo.strip():
+                c.titulo = t.titulo.strip()[:100]
+            if t.legenda_post.strip():
+                c.legenda_post = t.legenda_post.strip()
+            if t.hashtags:
+                c.hashtags = t.hashtags[:5]
+            c.reacoes = [r for r in t.reacoes if c.inicio + 4 <= r.t <= c.fim]
+
+
 def _completar_reacoes(cortes: list[Corte], palavras: list[dict]) -> None:
     """Sem IA (ou se o Claude não sugeriu nenhum): textos de impacto pelas palavras-chave da fala."""
     for c in cortes:
@@ -1267,7 +1309,9 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
     prog.etapa("escolhendo")
     if em_volume:  # o vídeo inteiro em clipes curtos diferentes, sem IA na escolha
         cortes = volume.cortes(video, transcricao, analise, plano.duracao_min, plano.duracao_max, cancelado,
-                               lambda p, d="": prog(p, d))
+                               lambda p, d="": prog(0.9 * p, d))
+        if not meta["opcoes"].get("sem_ia"):
+            _textos_volume(cortes, transcricao, meta, pid, lambda p, d="": prog(0.9 + 0.1 * p, d))
     elif meta["modo"] == "gameplay":
         cortes = _cortes_gameplay(video, transcricao, analise, plano, pid,
                                   ver_imagens=_ver_imagens(meta["opcoes"]), cancelado=cancelado,
@@ -1282,7 +1326,8 @@ def processar(pid: str, cancelado=None, imprimir: bool = False) -> dict:
                     f"{plano.duracao_min:.0f}-{plano.duracao_max:.0f} s sem repetir trechos. Para mais clipes, "
                     "use um vídeo mais longo ou uma duração menor.")
     cortes.sort(key=lambda c: c.nota, reverse=True)
-    _completar_reacoes(cortes, transcricao["palavras"])
+    if not llm.idioma_post() or llm.idioma_post() == transcricao.get("idioma"):
+        _completar_reacoes(cortes, transcricao["palavras"])  # as locais saem no idioma da fala
     clips = [_novo_clip(f"clip_{i:02d}", c) for i, c in enumerate(cortes, 1)]
     prontos = sum(_reaproveitar(c, antigos.get(c["id"])) for c in clips)
     if retomar:

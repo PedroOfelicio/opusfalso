@@ -533,3 +533,26 @@ class Correcoes(BaseModel):
     @classmethod
     def _correcoes(cls, v):
         return lista_tolerante(Correcao, v)
+
+
+class TextosClipe(BaseModel):
+    """Modo volume: só os textos de publicação de um clipe já cortado (o código decidiu o corte)."""
+    id: int
+    titulo: str = ""
+    legenda_post: str = ""
+    hashtags: list[str] = Field(default_factory=list)
+    reacoes: list[Reacao] = Field(default_factory=list)
+
+    @field_validator("reacoes", mode="before")
+    @classmethod
+    def _reacoes(cls, v):
+        return lista_tolerante(Reacao, v)[:2]
+
+
+class RespostaTextos(BaseModel):
+    clipes: list[TextosClipe] = Field(default_factory=list)
+
+    @field_validator("clipes", mode="before")
+    @classmethod
+    def _clipes(cls, v):
+        return lista_tolerante(TextosClipe, v)

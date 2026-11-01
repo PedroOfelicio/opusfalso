@@ -13,6 +13,8 @@ Layouts:
 - "centro":  recorte fixo (com deslocamento manual -1..1)
 - "inteiro": vídeo inteiro no meio, fundo desfocado
 - "split":   gameplay em cima, facecam (ou vídeo de apoio) embaixo
+- "cam_topo": webcam em cima (40% da altura) e gameplay embaixo. A webcam sai do retângulo marcado em
+             Configurações ou, sem ele, da facecam achada pelo rosto
 - "jogo":    gameplay em destaque: recorte 4:5 do centro (mira) ocupando ~70% da altura,
              fundo desfocado em cima (título) e embaixo
 - "pip":     como "jogo", com a facecam num quadro com borda colorida no canto (estilo YouTuber)
@@ -396,6 +398,50 @@ def _fundo_desfocado(frame, largura, altura):
     return (cv2.resize(pequeno, (largura, altura)) * 0.55).astype(np.uint8)
 
 
+FRACAO_CAM = 0.40  # layout "cam_topo": a webcam ocupa os 40% de cima; o jogo, o resto
+
+
+def webcam_marcada(W: int, H: int):
+    """Retângulo (x0, y0, x1, y1) em pixels da webcam marcada em Configurações, ou None."""
+    r = config.carregar().get("webcam")
+    try:
+        x0, y0 = int(r["x"] * W), int(r["y"] * H)
+        x1, y1 = int((r["x"] + r["w"]) * W), int((r["y"] + r["h"]) * H)
+    except (TypeError, KeyError, ValueError):
+        return None
+    x0, y0, x1, y1 = max(0, x0), max(0, y0), min(W, x1), min(H, y1)
+    return (x0, y0, x1, y1) if x1 - x0 >= 16 and y1 - y0 >= 16 else None
+
+
+def fonte_da_cam(analise: "Analise"):
+    """De onde sai a webcam do "cam_topo": ("marcada", retângulo) ou ("rosto", facecam achada); None se não houver."""
+    marcada = webcam_marcada(analise.largura, analise.altura)
+    if marcada:
+        return ("marcada", marcada)
+    rosto = _facecam(analise)
+    return ("rosto", rosto) if rosto else None
+
+
+def quadro_cam_topo(frame, cam, LW: int, LH: int, z: float = 1.0, borda=None):
+    """Webcam em cima e o centro do jogo (onde fica a mira) embaixo, com uma faixa colorida na divisa."""
+    H, W = frame.shape[:2]
+    alto_cam = int(LH * FRACAO_CAM) // 2 * 2
+    alto_jogo = LH - alto_cam
+    tipo, dados = cam
+    if tipo == "marcada":
+        x0, y0, x1, y1 = dados
+        topo = _cobrir(frame[y0:y1, x0:x1], LW, alto_cam)
+    else:
+        topo = _recorte_facecam(frame, dados, LW, alto_cam, folga=3.2)
+    x0, y0, cw, ch = _recorte(W, H, LW / alto_jogo, W / 2, H / 2, z)
+    jogo = cv2.resize(frame[y0:y0 + ch, x0:x0 + cw], (LW, alto_jogo), interpolation=cv2.INTER_LINEAR)
+    quadro = np.vstack([topo, jogo])
+    if borda:
+        meia = max(3, LW // 200)
+        cv2.rectangle(quadro, (0, alto_cam - meia), (LW, alto_cam + meia), borda, -1)
+    return quadro
+
+
 def _facecam(analise: Analise):
     """Região fixa da facecam (rosto que aparece quase sempre no mesmo lugar)."""
     if not analise.trilhas:
@@ -448,7 +494,9 @@ def escolher_layout(opc: OpcoesRender, analise: Analise) -> str:
     if opc.formato != "9:16":
         return "rosto" if analise.trilhas else "centro"
     if opc.modo == "gameplay":
-        return "split" if (_facecam(analise) or opc.video_apoio) else "jogo"
+        if fonte_da_cam(analise):
+            return "cam_topo"
+        return "split" if opc.video_apoio else "jogo"
     return "rosto" if analise.trilhas else "inteiro"
 
 
@@ -480,9 +528,12 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
     efeitos = _efeitos_por_quadro(opc, total, fps, z)
 
     facecam = _facecam(analise) if layout in ("split", "pip") else None
+    if layout == "cam_topo":
+        facecam = fonte_da_cam(analise)
     apoio = cv2.VideoCapture(opc.video_apoio) if (layout == "split" and opc.video_apoio and not facecam) else None
-    if (layout == "split" and not facecam and apoio is None) or (layout == "pip" and not facecam):
+    if (layout == "split" and not facecam and apoio is None) or (layout in ("pip", "cam_topo") and not facecam):
         layout = "jogo"  # sem facecam nem vídeo de apoio
+    centro_reacao = 0.56 if layout == "cam_topo" else 0.30  # no cam_topo, no alto do jogo (e não no rosto)
     borda = _hex_bgr(opc.cor_borda) if opc.cor_borda else None
 
     dupla = None
@@ -523,7 +574,7 @@ def renderizar(entrada: str | Path, saida: str | Path, opc: OpcoesRender,
             if i in efeitos:
                 quadro = _aplicar_efeito(quadro, *efeitos[i], i)
             for t0, fig in opc.reacoes:
-                quadro = enfeites.compor_reacao(quadro, fig, i / FPS_SAIDA, t0)
+                quadro = enfeites.compor_reacao(quadro, fig, i / FPS_SAIDA, t0, centro_y=centro_reacao)
             if barra_cor:
                 cv2.rectangle(quadro, (0, 0), (int(LW * (i + 1) / total), barra_alt), barra_cor, -1)
             proc.stdin.write(quadro.tobytes())
@@ -662,6 +713,8 @@ def _recorte_facecam(frame, facecam, largura: int, altura: int, folga: float = 2
 
 def _compor(frame, layout, i, LW, LH, aspecto, cx, cy, z, facecam, apoio, dupla, borda=None):
     H, W = frame.shape[:2]
+    if layout == "cam_topo":
+        return quadro_cam_topo(frame, facecam, LW, LH, z[i], borda)
     if layout == "pip":
         # Jogo em destaque + facecam num quadro 5:4 com borda colorida no canto de cima da janela do jogo
         quadro = _compor(frame, "jogo", i, LW, LH, aspecto, cx, cy, z, None, None, None)

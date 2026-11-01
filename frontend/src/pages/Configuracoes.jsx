@@ -1,7 +1,7 @@
 // Configurações: chave da API, modelo, pasta de saída, GPU/Whisper e custo acumulado.
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { ChevronDown, Copy, Cpu, DollarSign, Download, Eye, EyeOff, FolderOpen, HardDrive, KeyRound, Laugh, Music, Pause, Play, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { ChevronDown, Copy, Cpu, DollarSign, Download, Eye, EyeOff, FolderOpen, HardDrive, KeyRound, Laugh, Music, Pause, Play, RefreshCw, Save, ShieldCheck, Trash2, Webcam } from "lucide-react";
 import { api, CLIMAS, formatarCusto } from "../api";
 import { Alternador, Aviso, Botao, Confirmar, EstadoErro, Esqueleto, useAvisar } from "../components/ui";
 
@@ -65,7 +65,7 @@ export default function Configuracoes() {
   const salvar = async () => {
     setSalvando(true);
     try {
-      const dados = { modelo: cfg.modelo, modelo_rapido: cfg.modelo_rapido, pasta_saida: cfg.pasta_saida, usar_gpu: cfg.usar_gpu, modelo_whisper: cfg.modelo_whisper, idioma: cfg.idioma, limite_projeto: Number(cfg.limite_projeto) || 0, limite_mes: Number(cfg.limite_mes) || 0, workspace_id: (cfg.workspace_id || "").trim(), pexels_key: (cfg.pexels_key || "").trim(), pixabay_key: (cfg.pixabay_key || "").trim() };
+      const dados = { modelo: cfg.modelo, modelo_rapido: cfg.modelo_rapido, pasta_saida: cfg.pasta_saida, usar_gpu: cfg.usar_gpu, modelo_whisper: cfg.modelo_whisper, idioma: cfg.idioma, limite_projeto: Number(cfg.limite_projeto) || 0, limite_mes: Number(cfg.limite_mes) || 0, workspace_id: (cfg.workspace_id || "").trim(), pexels_key: (cfg.pexels_key || "").trim(), pixabay_key: (cfg.pixabay_key || "").trim(), idioma_post: cfg.idioma_post ?? "en", webcam: cfg.webcam || {} };
       if (novaChave.trim()) dados.api_key = novaChave.trim();
       setCfg(await api.salvarConfig(dados));
       setNovaChave("");
@@ -96,6 +96,8 @@ export default function Configuracoes() {
         </div>
         <Botao variante="primario" icone={Save} onClick={salvar} carregando={salvando}>Salvar</Botao>
       </div>
+
+      <SecaoWebcam cfg={cfg} setCfg={setCfg} salvar={salvar} salvando={salvando} />
 
       <Secao icone={KeyRound} titulo="Claude (API da Anthropic)" descricao="Usado para entender a instrução e escolher os melhores trechos.">
         <div>
@@ -298,6 +300,127 @@ export default function Configuracoes() {
         aoFechar={() => setZerando(false)}
       />
     </div>
+  );
+}
+
+// ------------------------------------------------------------------ webcam e idioma do canal
+
+const FRACAO_CAM = 0.4; // igual ao backend (reenquadramento.FRACAO_CAM)
+const IDIOMAS_POST = [
+  { id: "en", rotulo: "Inglês" },
+  { id: "pt", rotulo: "Português" },
+  { id: "es", rotulo: "Espanhol" },
+  { id: "", rotulo: "O mesmo da fala" },
+];
+
+function SecaoWebcam({ cfg, setCfg, salvar, salvando }) {
+  const avisar = useAvisar();
+  const [caminho, setCaminho] = useState("");
+  const [quadro, setQuadro] = useState(null);
+  const [desenhando, setDesenhando] = useState(null); // ponto inicial {x, y} em fração
+  const area = useRef(null);
+  const imagem = useRef(null);
+  const previa = useRef(null);
+  const ret = cfg.webcam;
+
+  useEffect(() => {
+    api.videoParaWebcam().then((r) => r.caminho && setCaminho(r.caminho)).catch(() => {});
+  }, []);
+
+  const carregarQuadro = (aleatorio = false) => {
+    const c = caminho.trim().replace(/^"|"$/g, "");
+    if (!c) return avisar("Cole o caminho de um vídeo seu gravado com a webcam", "erro");
+    setQuadro(api.urlQuadroWebcam(c, aleatorio ? Math.round(Math.random() * 600) : null));
+  };
+
+  const ponto = (e) => {
+    const r = area.current.getBoundingClientRect();
+    return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
+  };
+  const mover = (e) => {
+    if (!desenhando) return;
+    const p = ponto(e);
+    setCfg((c) => ({ ...c, webcam: { x: Math.min(p.x, desenhando.x), y: Math.min(p.y, desenhando.y), w: Math.abs(p.x - desenhando.x), h: Math.abs(p.y - desenhando.y) } }));
+  };
+
+  // Prévia do corte vertical: webcam em cima (40%) e o centro do jogo embaixo, como o render faz
+  const desenharPrevia = () => {
+    const tela = previa.current;
+    const img = imagem.current;
+    if (!tela || !img?.naturalWidth) return;
+    const ctx = tela.getContext("2d");
+    const W = tela.width, H = tela.height, iw = img.naturalWidth, ih = img.naturalHeight;
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, W, H);
+    const cobrir = (sx, sy, sw, sh, dy, dh) => {
+      const alvo = W / dh;
+      let cw = sw, ch = sh;
+      if (sw / sh > alvo) cw = sh * alvo; else ch = sw / alvo;
+      ctx.drawImage(img, sx + (sw - cw) / 2, sy + (sh - ch) / 2, cw, ch, 0, dy, W, dh);
+    };
+    const altoCam = Math.round(H * FRACAO_CAM);
+    cobrir(0, 0, iw, ih, altoCam, H - altoCam);
+    if (ret?.w > 0.01 && ret?.h > 0.01) cobrir(ret.x * iw, ret.y * ih, ret.w * iw, ret.h * ih, 0, altoCam);
+    ctx.fillStyle = "#3B82F6";
+    ctx.fillRect(0, altoCam - 1.5, W, 3);
+  };
+  useEffect(desenharPrevia, [ret, quadro]);
+
+  return (
+    <Secao id="webcam" icone={Webcam} titulo="Formato dos cortes e idioma do canal" descricao="Os cortes saem com a sua webcam em cima e a gameplay embaixo. Marque uma vez onde a webcam fica nas suas gravações.">
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input value={caminho} onChange={(e) => setCaminho(e.target.value)} placeholder="Caminho de um vídeo seu (ex.: C:\Videos\gameplay.mp4)" className="campo font-mono text-[13px] flex-1" />
+        <Botao onClick={() => carregarQuadro(false)}>Carregar quadro</Botao>
+        {quadro && <Botao variante="fantasma" icone={RefreshCw} onClick={() => carregarQuadro(true)} title="Outro momento do vídeo">Outro</Botao>}
+      </div>
+
+      {quadro && (
+        <div className="grid sm:grid-cols-[1fr_auto] gap-4 items-start">
+          <div>
+            <div
+              ref={area}
+              className="relative select-none cursor-crosshair rounded-xl overflow-hidden border border-borda touch-none"
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                setDesenhando(ponto(e));
+              }}
+              onPointerMove={mover}
+              onPointerUp={() => setDesenhando(null)}
+            >
+              <img ref={imagem} src={quadro} alt="Quadro do vídeo" className="w-full block" draggable={false} onLoad={desenharPrevia} onError={() => { setQuadro(null); avisar("Não consegui abrir esse vídeo", "erro"); }} />
+              {ret?.w > 0 && (
+                <div className="absolute border-[3px] border-azul bg-azul/15 pointer-events-none" style={{ left: `${ret.x * 100}%`, top: `${ret.y * 100}%`, width: `${ret.w * 100}%`, height: `${ret.h * 100}%` }} />
+              )}
+            </div>
+            <p className="text-xs text-apagado mt-2">Arraste sobre a imagem para marcar a webcam. Pegue só a câmera, sem a borda do overlay.</p>
+          </div>
+          <div className="text-center">
+            <canvas ref={previa} width={180} height={320} className="rounded-xl border border-borda mx-auto" />
+            <div className="text-xs text-suave mt-1">Prévia do corte</div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <span className={`text-xs px-2.5 py-1 rounded-full border ${ret ? "border-verde/30 text-verde" : "border-amarelo/30 text-amarelo"}`}>
+          {ret ? "Webcam marcada" : "Webcam não marcada: o app tenta achar o rosto sozinho"}
+        </span>
+        {ret && <Botao tamanho="sm" variante="fantasma" icone={Trash2} onClick={() => setCfg({ ...cfg, webcam: null })}>Limpar</Botao>}
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label className="rotulo">Idioma dos títulos, descrições e thumbnails</label>
+          <select value={cfg.idioma_post ?? "en"} onChange={(e) => setCfg({ ...cfg, idioma_post: e.target.value })} className="campo mt-2 cursor-pointer">
+            {IDIOMAS_POST.map((m) => <option key={m.id} value={m.id}>{m.rotulo}</option>)}
+          </select>
+          <p className="text-xs text-apagado mt-1.5">Vale também para os textos de impacto na tela. A legenda segue a fala (dá para traduzir no Início).</p>
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <Botao variante="primario" icone={Save} onClick={salvar} carregando={salvando}>Salvar</Botao>
+      </div>
+    </Secao>
   );
 }
 

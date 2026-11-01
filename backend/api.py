@@ -18,9 +18,9 @@ import uuid
 import zipfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 from starlette.background import BackgroundTask
@@ -33,6 +33,7 @@ import editor_ffmpeg as ef
 import legendas
 import longo
 import memes
+import metricas
 import postagem
 import pipeline
 import planejador_llm as llm
@@ -81,6 +82,7 @@ def _inicio():
     fila.antes = _antes_do_job
     fila.depois = youtube.liberar_video
     fila.iniciar()
+    metricas.em_segundo_plano()
     log.info("API pronta. Dados em %s", config.DADOS)
 
 
@@ -206,6 +208,7 @@ def ler_config():
         return (v[:4] + "••••••••" + v[-4:]) if v else ""
     return {**cfg, "pexels_key": mascara(cfg.get("pexels_key") or ""),
             "pixabay_key": mascara(cfg.get("pixabay_key") or ""),
+            "youtube_key": mascara(cfg.get("youtube_key") or ""),
             "api_key": _mascarar(config.api_key()), "api_key_origem":
             "config" if cfg.get("api_key") else ("ambiente" if chave_ambiente else None)}
 
@@ -223,6 +226,9 @@ class ConfigEntrada(BaseModel):
     idioma: str | None = None
     limite_projeto: float | None = Field(None, ge=0, le=1000)
     limite_mes: float | None = Field(None, ge=0, le=10000)
+    webcam: dict | None = None               # {"x", "y", "w", "h"} em fração do quadro; {} apaga
+    idioma_post: str | None = None
+    youtube_key: str | None = None
 
 
 @app.post("/api/config/testar")
@@ -287,6 +293,18 @@ def diagnostico():
     return {"texto": "\n".join(linhas)}
 
 
+def _webcam_valida(r: dict) -> dict | None:
+    if not r:
+        return None
+    try:
+        x, y, w, h = (min(1.0, max(0.0, float(r[k]))) for k in ("x", "y", "w", "h"))
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(400, "Retângulo da webcam inválido")
+    if w < 0.03 or h < 0.03 or x + w > 1.001 or y + h > 1.001:
+        raise HTTPException(400, "Retângulo da webcam pequeno demais ou fora do quadro")
+    return {"x": round(x, 4), "y": round(y, 4), "w": round(w, 4), "h": round(h, 4)}
+
+
 @app.put("/api/config")
 def salvar_config(dados: ConfigEntrada):
     novos = {k: v for k, v in dados.model_dump().items() if v is not None}
@@ -294,11 +312,13 @@ def salvar_config(dados: ConfigEntrada):
         novos.pop("api_key")  # veio a versão mascarada: não altera
     elif "api_key" in novos and not novos["api_key"].startswith("sk-ant-"):
         raise HTTPException(400, "Chave inválida: a chave da API da Anthropic começa com \"sk-ant-\".")
-    for k in ("pexels_key", "pixabay_key"):
+    for k in ("pexels_key", "pixabay_key", "youtube_key"):
         if k in novos and "••" in novos[k]:
             novos.pop(k)  # versão mascarada: não altera
     if "pasta_saida" in novos:
         Path(novos["pasta_saida"]).mkdir(parents=True, exist_ok=True)
+    if "webcam" in novos:
+        novos["webcam"] = _webcam_valida(novos["webcam"])
     config.salvar(novos)
     return ler_config()
 
@@ -960,70 +980,156 @@ def abrir_pasta_memes():
     return {"ok": True}
 
 
-# ================================================================ postagem nos canais (sem a API do YouTube)
+# ================================================================ prontos para postar (um canal, sem a API do YouTube)
 
-class CanalEntrada(BaseModel):
-    nome: str | None = None
-    url: str | None = None
-    por_dia: int | None = Field(None, ge=1, le=50)
-    ativo: bool | None = None
-
-
-@app.get("/api/postagem")
-def estado_postagem():
+@app.get("/api/prontos")
+def prontos():
     return postagem.estado()
 
 
-@app.post("/api/postagem/canais")
-def criar_canal(dados: CanalEntrada):
-    if not (dados.nome or "").strip():
-        raise HTTPException(400, "Dê um nome ao canal")
-    postagem.salvar_canal(dados.model_dump(exclude_none=True))
-    return postagem.estado()
+class EstadoItem(BaseModel):
+    chave: str
+    estado: str
 
 
-@app.put("/api/postagem/canais/{canal}")
-def editar_canal(canal: str, dados: CanalEntrada):
+@app.post("/api/prontos/estado")
+def marcar_item(dados: EstadoItem):
     try:
-        postagem.salvar_canal(dados.model_dump(exclude_none=True), canal)
-    except KeyError:
-        raise HTTPException(404, "Canal não encontrado")
-    return postagem.estado()
+        return postagem.marcar(dados.chave, dados.estado)
+    except KeyError as e:
+        raise HTTPException(404, str(e).strip("'\""))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
-@app.delete("/api/postagem/canais/{canal}")
-def excluir_canal(canal: str):
-    postagem.excluir_canal(canal)
-    return postagem.estado()
+class TextosItem(BaseModel):
+    chave: str
+    titulo: str | None = Field(None, max_length=100)
+    descricao: str | None = Field(None, max_length=5000)
 
 
-@app.post("/api/postagem/fila")
-def montar_fila():
-    return postagem.montar_fila()
-
-
-@app.post("/api/postagem/pular")
-def pular_clipe(dados: dict):
-    return postagem.pular(str(dados.get("chave", "")))
-
-
-@app.post("/api/postagem/canais/{canal}/abrir-pasta")
-def abrir_pasta_canal(canal: str):
-    """Monta a pasta do canal (vídeos com nome = título) e abre no Explorer, com os vídeos prontos para arrastar."""
+@app.put("/api/prontos/textos")
+def editar_textos_item(dados: TextosItem):
     try:
-        pasta = postagem.preparar_pasta(canal)
+        return postagem.editar_textos(dados.chave, dados.titulo, dados.descricao)
+    except KeyError as e:
+        raise HTTPException(404, str(e).strip("'\""))
+
+
+@app.post("/api/prontos/abrir-pasta")
+def abrir_pasta_item(dados: dict):
+    """Monta a pasta do item (vídeo com nome = título, thumbnail e descrição) e abre no Explorer."""
+    try:
+        pasta = postagem.preparar_pasta(str(dados.get("chave", "")))
     except KeyError as e:
         raise HTTPException(404, str(e).strip("'\""))
     subprocess.Popen(["explorer", str(pasta)], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return {"ok": True, "pasta": str(pasta)}
 
 
-@app.post("/api/postagem/canais/{canal}/postado")
-def marcar_postado(canal: str, dados: dict):
+@app.put("/api/prontos/canal")
+def salvar_canal(dados: dict):
+    return postagem.salvar_canal(str(dados.get("url", "")))
+
+
+# ================================================================ métricas do canal (YouTube Data API, números públicos)
+
+@app.get("/api/metricas")
+def ver_metricas():
+    """Estado guardado; se o último retrato tem mais de 3 h, atualiza antes (alguns segundos)."""
+    metricas.atualizar_se_preciso()
+    return metricas.estado()
+
+
+@app.post("/api/metricas/atualizar")
+def atualizar_metricas():
     try:
-        return postagem.marcar_postado(canal, bool(dados.get("postado", True)))
-    except KeyError as e:
-        raise HTTPException(404, str(e).strip("'\""))
+        metricas.atualizar_se_preciso(forcar=True)
+    except metricas.ErroYoutube as e:
+        raise HTTPException(400, str(e))
+    return metricas.estado()
+
+
+@app.post("/api/metricas/marcar-postados")
+def marcar_publicados():
+    """Itens da aba Prontos que já estão no canal (mesmo título) viram "postado"."""
+    n = metricas.marcar_publicados()
+    return {"marcados": n, **metricas.estado()}
+
+
+@app.post("/api/metricas/oauth/cliente")
+def salvar_cliente_oauth(dados: dict):
+    """Guarda o client_secret_....json (cliente OAuth "App para computador") baixado do Google Cloud."""
+    try:
+        metricas.salvar_cliente(str(dados.get("caminho", "")))
+    except metricas.ErroYoutube as e:
+        raise HTTPException(400, str(e))
+    return metricas.estado()
+
+
+@app.post("/api/metricas/oauth/iniciar")
+def iniciar_login_google(request: Request):
+    """Abre o login do Google no navegador do PC; o Google volta para /api/metricas/oauth/retorno."""
+    try:
+        url = metricas.url_login(f"http://localhost:{request.url.port or 8000}/api/metricas/oauth/retorno")
+    except metricas.ErroYoutube as e:
+        raise HTTPException(400, str(e))
+    __import__("webbrowser").open(url)
+    return {"url": url}
+
+
+@app.get("/api/metricas/oauth/retorno", include_in_schema=False)
+def retorno_login_google(code: str = "", state: str = "", error: str = ""):
+    if error:
+        titulo, texto = "Login cancelado", f"O Google respondeu: {error}. Volte ao app e tente de novo."
+    else:
+        try:
+            metricas.concluir_login(code, state)
+            threading.Thread(target=metricas.atualizar_se_preciso, daemon=True).start()
+            titulo, texto = "Canal conectado", "Pode fechar esta aba e voltar ao Gadosso Edit."
+        except metricas.ErroYoutube as e:
+            titulo, texto = "Não deu certo", str(e)
+    texto = __import__("html").escape(texto)
+    corpo = (f"<!doctype html><meta charset='utf-8'><title>{titulo}</title>"
+             "<body style='font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0;background:#f4f4f6'>"
+             f"<div style='text-align:center'><h1 style='font-weight:600'>{titulo}</h1><p>{texto}</p></div>")
+    return HTMLResponse(corpo)
+
+
+@app.post("/api/metricas/oauth/sair")
+def sair_google():
+    metricas.desconectar()
+    return metricas.estado()
+
+
+# ================================================================ webcam (retângulo marcado em Configurações)
+
+@app.get("/api/webcam/video")
+def video_para_webcam():
+    """Sugestão de vídeo para marcar a webcam: o do projeto de gameplay mais recente que ainda existe."""
+    for meta in projetos.listar():
+        if meta.get("modo") == "gameplay" and meta.get("video") and Path(meta["video"]).is_file():
+            return {"caminho": meta["video"]}
+    return {"caminho": ""}
+
+
+@app.get("/api/webcam/quadro")
+def quadro_para_webcam(caminho: str, t: float | None = None):
+    """Um quadro (1280 px) do vídeo, para desenhar em cima onde a webcam fica."""
+    video = Path(caminho.strip().strip('"'))
+    if not video.is_file():
+        raise HTTPException(404, "Vídeo não encontrado nesse caminho")
+    try:
+        duracao = ef.sondar(video)["duracao"]
+    except Exception:
+        raise HTTPException(400, "Não consegui ler esse vídeo")
+    arq = config.PASTA_CACHE / "webcam_quadro.jpg"
+    try:
+        ef.extrair_frame(video, min(max(0.0, t if t is not None else duracao * 0.3), max(0.0, duracao - 0.5)), arq,
+                         largura=1280)
+    except Exception:
+        raise HTTPException(400, "Não consegui extrair um quadro desse vídeo")
+    return FileResponse(arq, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
 # ================================================================ interface compilada (opcional)

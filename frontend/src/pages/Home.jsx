@@ -34,11 +34,12 @@ export default function Home() {
   const [arrastando, setArrastando] = useState(false);
   // o que fazer
   const [tipo, setTipo] = useState("curto"); // curto | longo
-  const [modo, setModo] = useState("falado");
+  const [modo, setModo] = useState("gameplay");
   const [instrucao, setInstrucao] = useState("");
   const [maisOpcoes, setMaisOpcoes] = useState(false);
   const [comIa, setComIaEstado] = useState(() => lerComIa() ?? true);
   const [temChave, setTemChave] = useState(true);
+  const [webcamMarcada, setWebcamMarcada] = useState(true);
   // clipes curtos
   const [numClips, setNumClips] = useState(5);
   const [volume, setVolume] = useState(false); // o vídeo inteiro em clipes curtos diferentes
@@ -46,7 +47,7 @@ export default function Home() {
   const [preset, setPreset] = useState("gamer");
   const [animada, setAnimada] = useState(true);
   const [formato, setFormato] = useState("9:16");
-  const [layout, setLayout] = useState("auto");
+  const [layout, setLayout] = useState("cam_topo"); // webcam em cima, gameplay embaixo
   const [idiomaLegenda, setIdiomaLegenda] = useState("");
   const [titulo, setTitulo] = useState(true);
   const [silencios, setSilencios] = useState(true);
@@ -61,7 +62,7 @@ export default function Home() {
   const [ritmo, setRitmo] = useState("dinamico");
   const [removerErros, setRemoverErros] = useState(true);
   const [cortarParado, setCortarParado] = useState(true);
-  const [legendaLonga, setLegendaLonga] = useState(false);
+  const [legendaLonga, setLegendaLonga] = useState(true);
   // comuns
   const [musica, setMusica] = useState("");
   const [efeitos, setEfeitos] = useState(true);
@@ -78,6 +79,7 @@ export default function Home() {
   useEffect(() => {
     api.estilos().then(setEstilos).catch(() => {});
     api.audio().then(setAudio).catch(() => {});
+    api.config().then((c) => setWebcamMarcada(!!c?.webcam)).catch(() => {});
     // sem chave do Claude e sem escolha lembrada: já começa no "Sem IA"
     api.sistema().then((s) => {
       setTemChave(!!s?.tem_chave);
@@ -317,6 +319,15 @@ export default function Home() {
           )}
         </div>
 
+        {tipo === "curto" && modo === "gameplay" && layout === "cam_topo" && (
+          <p className="text-xs text-apagado mt-3">
+            Formato: webcam em cima, gameplay embaixo.{" "}
+            {webcamMarcada
+              ? <Link to="/configuracoes#webcam" className="underline">Trocar onde fica a webcam</Link>
+              : <><b className="text-amarelo">Webcam ainda não marcada</b> (o app tenta achar o rosto sozinho): <Link to="/configuracoes#webcam" className="underline">marcar agora</Link>.</>}
+          </p>
+        )}
+
         {tipo === "longo" && modoLongo === "melhores" && (
           <div className="mt-4">
             <div className="rotulo mb-2">Duração da compilação</div>
@@ -373,6 +384,7 @@ export default function Home() {
                 <div>
                   <label className="rotulo">Enquadramento</label>
                   <select value={layout} onChange={(e) => setLayout(e.target.value)} className="campo mt-2 cursor-pointer">
+                    <option value="cam_topo">Webcam em cima + gameplay embaixo</option>
                     <option value="auto">Automático</option>
                     <option value="rosto">Seguir quem fala</option>
                     <option value="dupla">Duas pessoas (tela dividida)</option>

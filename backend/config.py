@@ -46,6 +46,9 @@ PADRAO = {
     "pixabay_key": "",                  # B-roll (pixabay.com/api/docs, grátis); vazio = PIXABAY_API_KEY
     "limite_projeto": 0.0,              # US$ máximos de Claude por projeto; passou, o resto sai sem IA (0 = sem limite)
     "limite_mes": 0.0,                  # US$ máximos de Claude por mês, somando todos os projetos (0 = sem limite)
+    "webcam": None,                     # onde a webcam fica na gravação: {"x", "y", "w", "h"} em fração (0-1) do quadro
+    "idioma_post": "en",                # títulos, descrições, thumbnails e textos na tela (vazio = o idioma da fala)
+    "youtube_key": "",                  # YouTube Data API v3 (grátis, só números públicos) para a aba Métricas
 }
 
 _trava = threading.Lock()
